@@ -211,8 +211,9 @@ def process_user_meal_image():
         200 OK with ingredient nutritional info.
     """
     image = request.files.get("image")
+    image_bytes = image.read()
 
-    ingredients = process_image(image)
+    ingredients = process_image(image_bytes)
     return jsonify(ingredients), 200
 
 @app.route("/add_meal", methods=["POST"])
