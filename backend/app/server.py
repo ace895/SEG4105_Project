@@ -1,9 +1,10 @@
-from flask import Flask, request, jsonify
+from pathlib import Path
+from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 
-from backend.app.utils.process_meal import process_image
-from backend.app.utils.user_meals_utils import edit_dietary_info, edit_goal, get_meal_history, get_meals, get_status, add_meal, edit_meal
-from backend.app.utils.user_utils import authenticate, get_profile, get_recommendations, login, signup, toggle_notifications
+from .utils.process_meal import process_image
+from .utils.user_meals_utils import get_meal_history, get_meals, get_status, add_meal, edit_meal, get_recommendations
+from .utils.user_utils import authenticate, get_profile, login, signup, toggle_notifications, edit_dietary_info, edit_goal
 
 app = Flask(__name__)
 CORS(app)
@@ -52,7 +53,7 @@ def user_authenticate():
     Request JSON:
         {
             "email": "user@example.com",
-            "verification_code": "123456"
+            "verification_code": 123456
         }
 
     Returns:
@@ -97,7 +98,7 @@ def user_signup():
         return jsonify({"success": False, "message": "User already exists"}), 400
 
 
-@app.route("/get_profile", methods=["GET"])
+@app.route("/get-profile", methods=["GET"])
 def get_user_profile():
     """
     Retrieves a user's profile information.
@@ -116,7 +117,7 @@ def get_user_profile():
 
     return jsonify(profile), 200
 
-@app.route("/get_status", methods=["GET"])
+@app.route("/get-status", methods=["GET"])
 def get_user_status():
     """
     Determines whether a user is on track toward their goal.
@@ -133,7 +134,7 @@ def get_user_status():
     status = get_status(email)
     return jsonify({"status": status}), 200
 
-@app.route("/get_meal_history", methods=["GET"])
+@app.route("/get-meal-history", methods=["GET"])
 def get_user_meal_history():
     """
     Retrieves a user's meal history within an optional time frame.
@@ -153,7 +154,7 @@ def get_user_meal_history():
     history = get_meal_history(email, start_date, end_date)
     return jsonify(history), 200
 
-@app.route("/get_meals", methods=["GET"])
+@app.route("/get-meals", methods=["GET"])
 def get_user_meal():
     """
     Retrieves a user's meal information for a specific date.
@@ -171,10 +172,11 @@ def get_user_meal():
     meals = get_meals(email, date)
     return jsonify(meals), 200
 
-@app.route("/get_recommendations", methods=["GET"])
+@app.route("/get-recommendations", methods=["GET"])
 def get_user_recommendations():
     """
-    Provides food recommendations based on a user's goal and current intake.
+    Provides food recommendations based on a user's goal and current intake. To retrieve the image, 
+    call fetch on the image_url
 
     Query Parameters:
         email (str): User's email address.
@@ -189,8 +191,8 @@ def get_user_recommendations():
                 "protein": 30,
                 "fat": 5,
                 "carb": 2,
-                "type": "Lunch",
-                "image": "https://example.com/chicken.jpg"
+                "type": "Protein",
+                "image_url": "[SERVER URL]/get-image/berry_chicken_salad.jpg"
             }
         ]
     """
@@ -199,7 +201,7 @@ def get_user_recommendations():
     recommendations = get_recommendations(email)
     return jsonify(recommendations), 200
 
-@app.route("/process_meal_image", methods=["POST"])
+@app.route("/process-meal-image", methods=["POST"])
 def process_user_meal_image():
     """
     Analyzes an uploaded meal image to identify ingredients and nutrition.
@@ -216,7 +218,7 @@ def process_user_meal_image():
     ingredients = process_image(image_bytes)
     return jsonify(ingredients), 200
 
-@app.route("/add_meal", methods=["POST"])
+@app.route("/add-meal", methods=["POST"])
 def add_user_meal():
     """
     Adds a meal entry for the user.
@@ -243,7 +245,7 @@ def add_user_meal():
         return jsonify({"success": True}), 201
     return jsonify({"success": False}), 400
 
-@app.route("/edit_meal", methods=["PUT"])
+@app.route("/edit-meal", methods=["PUT"])
 def edit_user_meal():
     """
     Updates an existing meal entry for the user.
@@ -268,7 +270,7 @@ def edit_user_meal():
         return jsonify({"success": True}), 200
     return jsonify({"success": False, "message": "Meal not found"}), 404
 
-@app.route("/toggle_notifications", methods=["POST"])
+@app.route("/toggle-notifications", methods=["POST"])
 def toggle_notifications_setting():
     """
     Toggles the user's notification preference.
@@ -286,7 +288,7 @@ def toggle_notifications_setting():
     success = toggle_notifications(data)
     return jsonify({"success": success}), 200
 
-@app.route("/edit_dietary_info", methods=["PUT"])
+@app.route("/edit-dietary-info", methods=["PUT"])
 def edit_user_dietary_info():
     """
     Updates a user's dietary information.
@@ -307,7 +309,7 @@ def edit_user_dietary_info():
     success = edit_dietary_info(data)
     return jsonify({"success": success}), 200
 
-@app.route("/edit_goal", methods=["PUT"])
+@app.route("/edit-goal", methods=["PUT"])
 def edit_user_goal():
     """
     Updates the user's fitness or dietary goal.
@@ -325,5 +327,14 @@ def edit_user_goal():
     success = edit_goal(data)
     return jsonify({"success": success}), 200
 
+IMAGE_FOLDER = Path.cwd() / "app" / "static" / "images"
+@app.route("/get-image/<filename>")
+def get_image(filename):
+    """
+    Send an image from the image folder
+    """
+    return send_from_directory(IMAGE_FOLDER, filename)
+
+SERVER_URL = "http://127.0.0.1:8080"
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8080, debug=True)

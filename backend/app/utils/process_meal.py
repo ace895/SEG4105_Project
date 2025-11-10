@@ -1,6 +1,7 @@
 """
 Processes images to identify food and get its weight, calorie count, and macronutrient count
 """
+from pathlib import Path
 from PIL import Image
 from io import BytesIO
 
@@ -11,7 +12,6 @@ from dotenv import load_dotenv
 
 load_dotenv()
 USE_AWS=False
-HUGGING_FACE_KEY = os.getenv("HUGGING_FACE_KEY")
 USDA_API_KEY = os.getenv("USDA_API_KEY")
 USDA_API_URL = "https://api.nal.usda.gov/fdc/v1/foods/search"
 
@@ -74,7 +74,8 @@ if USE_AWS:
 else:
     #Load ingrediants
     INGREDIENT_CANDIDATES = []
-    with open('ingredients.txt', 'r') as file:
+    current_dir = Path.cwd() / "app" / "utils"
+    with open(current_dir / 'ingredients.txt', 'r') as file:
         INGREDIENT_CANDIDATES = [line.strip() for line in file.readlines()]
 
     #Load image classification model

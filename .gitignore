@@ -1,5 +1,5 @@
 venv/
 __pycache__/
 .env
-*.jpeg
-*.jpg
+backend/app/utils/*.jpg
+backend/app/utils/*.jpeg

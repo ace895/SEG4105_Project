@@ -2,6 +2,10 @@
 Handle user meal functionality
 """
 
+from pathlib import Path
+
+from server import SERVER_URL
+
 def add_meal(data): return True
 
 def edit_meal(data): return True
@@ -52,34 +56,24 @@ def get_recommendations(email):
     """
     return [
         {
-            "name": "Greek Yogurt with Berries",
-            "description": "High-protein, antioxidant-rich snack.",
-            "calorie": 180,
-            "protein": 15,
-            "fat": 4,
+            "name": "Berry & Chicken Salad",
+            "description": "Assortment of berries and cooked chicken mixed with a choice of greens",
+            "calorie": 260,
+            "protein": 34,
+            "fat": 5,
             "carb": 22,
-            "type": "Snack",
-            "image": "https://example.com/images/yogurt.jpg"
+            "type": "Salad",
+            "image_url": f"{SERVER_URL}/get-image/berry_chicken_salad.jpg"
         },
         {
-            "name": "Grilled Salmon with Quinoa",
-            "description": "Balanced meal for muscle recovery.",
-            "calorie": 450,
-            "protein": 40,
-            "fat": 15,
-            "carb": 35,
-            "type": "Dinner",
-            "image": "https://example.com/images/salmon.jpg"
-        },
-        {
-            "name": "Veggie Omelette",
-            "description": "Low-carb, protein-rich breakfast option.",
-            "calorie": 220,
-            "protein": 20,
-            "fat": 10,
-            "carb": 6,
-            "type": "Breakfast",
-            "image": "https://example.com/images/omelette.jpg"
+            "name": "Chicken and Vegetables",
+            "description": "Two slices of grilled chicken with choice of vegetables and greens",
+            "calorie": 320,
+            "protein": 51,
+            "fat": 5,
+            "carb": 21,
+            "type": "Protein",
+            "image_url": f"{SERVER_URL}/get-image/chicken_vegetables.jpg"
         }
     ]
 
