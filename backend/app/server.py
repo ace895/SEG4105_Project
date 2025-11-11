@@ -2,9 +2,11 @@ from pathlib import Path
 from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 
+from backend.app.db.meal_db import add_meal, edit_meal, get_meal_history, get_meals
+from backend.app.db.user_db import edit_dietary_info, edit_goal, get_profile, signup, toggle_notifications
+
 from .utils.process_meal import process_image
-from .utils.user_meals_utils import get_meal_history, get_meals, get_status, add_meal, edit_meal, get_recommendations
-from .utils.user_utils import authenticate, get_profile, login, signup, toggle_notifications, edit_dietary_info, edit_goal
+from .utils.utils import login, authenticate, get_recommendations, get_status
 
 app = Flask(__name__)
 CORS(app)
@@ -107,7 +109,16 @@ def get_user_profile():
         email (str): User's email address.
 
     Returns:
-        200 OK with user profile.
+        200 OK with user profile:
+            {
+                "name": "John", 
+                "height": 170, 
+                "weight": 70, 
+                "goal": "Muscle gain", 
+                "age": 25, 
+                "allergies": "None", 
+                "notifications_on": False
+            }
     """
     email = request.args.get("email")
 
@@ -127,7 +138,7 @@ def get_user_status():
 
     Returns:
         JSON object with "status":
-            -1 = not on track, 0 = on track, 2 = ahead.
+            -1 = not on track, 0 = on track, 1 = ahead.
     """
     email = request.args.get("email")
 
@@ -145,7 +156,20 @@ def get_user_meal_history():
         end_date (str, optional): ISO 8601 format date (YYYY-MM-DD).
 
     Returns:
-        200 OK with dictionary mapping dates to meals.
+        200 OK with dictionary mapping dates to meals:
+            {
+                "2025-11-05": {
+                    "08:30": {
+                        "Oatmeal": {"calorie": 150, "protein": 5, "fat": 3, "carb": 27, "weight": 60},
+                        "Banana": {"calorie": 90, "protein": 1, "fat": 0.3, "carb": 23, "weight": 40}
+                    }
+                },
+                "2025-11-06": {
+                    "19:30": {
+                        "Salmon": {"calorie": 250, "protein": 22, "fat": 14, "carb": 0, "weight": 80},
+                    }
+                }
+            }
     """
     email = request.args.get("email")
     start_date = request.args.get("start_date")
@@ -164,7 +188,17 @@ def get_user_meal():
         date (str): ISO 8601 format date (YYYY-MM-DD).
 
     Returns:
-        200 OK with meal data.
+        200 OK with meal data:
+            {
+                "08:30": {
+                    "Oatmeal": {"calorie": 150, "protein": 5, "fat": 3, "carb": 27, "weight": 60},
+                    "Banana": {"calorie": 90, "protein": 1, "fat": 0.3, "carb": 23, "weight": 40}
+                },
+                "13:00": {
+                    "Grilled Chicken": {"calorie": 280, "protein": 35, "fat": 8, "carb": 0, "weight": 80},
+                    "Rice": {"calorie": 200, "protein": 4, "fat": 0.5, "carb": 45, "weight": 70}
+                }
+            }
     """
     email = request.args.get("email")
     date = request.args.get("date")
@@ -210,7 +244,11 @@ def process_user_meal_image():
         image (file): Image of the meal.
 
     Returns:
-        200 OK with ingredient nutritional info.
+        200 OK with ingredient nutritional info:
+            {
+                "Salmon": {"calorie": 250, "protein": 22, "fat": 14, "carb": 0, "weight": 100},
+                "Broccoli": {"calorie": 55, "protein": 4, "fat": 0.5, "carb": 11, "weight": 10}
+            }
     """
     image = request.files.get("image")
     image_bytes = image.read()
@@ -228,7 +266,7 @@ def add_user_meal():
             "email": "user@example.com",
             "time": "2025-11-07T08:30:00Z",  # ISO 8601 format
             "ingredients": {
-                "bread": {"calorie": 70, "protein": 2, "fat": 1, "carb": 15}
+                "bread": {"calorie": 70, "protein": 2, "fat": 1, "carb": 15, "weight": 10}
             },
             "edited": false,
             "before_edit": {},
@@ -256,7 +294,7 @@ def edit_user_meal():
             "date": "2025-11-07",
             "time": "08:30",
             "ingredients": {
-                "apple": {"calorie": 95, "protein": 0.3, "fat": 0.2, "carb": 25}
+                "apple": {"calorie": 95, "protein": 0.3, "fat": 0.2, "carb": 25, "weight": 20}
             }
         }
 
@@ -277,15 +315,15 @@ def toggle_notifications_setting():
 
     Request JSON:
         {
-            "email": "user@example.com",
-            "notifications_on": true
+            "email": "user@example.com"
         }
 
     Returns:
         200 OK: If successful.
     """
     data = request.get_json()
-    success = toggle_notifications(data)
+    email = data.get("email")
+    success = toggle_notifications(email)
     return jsonify({"success": success}), 200
 
 @app.route("/edit-dietary-info", methods=["PUT"])
@@ -324,7 +362,9 @@ def edit_user_goal():
         200 OK: If successful.
     """
     data = request.get_json()
-    success = edit_goal(data)
+    email = data.get("email")
+    goal = data.get("goal")
+    success = edit_goal(email, goal)
     return jsonify({"success": success}), 200
 
 IMAGE_FOLDER = Path.cwd() / "app" / "static" / "images"
