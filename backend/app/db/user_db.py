@@ -1,6 +1,6 @@
 import hashlib
 
-from db import get_db_connection
+from app.db.db import get_db_connection
 
 def signup(email, password):
     """

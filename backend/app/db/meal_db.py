@@ -1,4 +1,4 @@
-from db import get_db_connection
+from app.db.db import get_db_connection
 from datetime import datetime
 
 def add_meal(data):

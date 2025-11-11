@@ -5,13 +5,13 @@ import random
 import smtplib
 from dotenv import load_dotenv
 
-from backend.app.db.meal_db import get_meals
-from backend.app.db.user_db import get_profile, login as login_db
-from backend.app.server import SERVER_URL
+from app.db.meal_db import get_meals
+from app.db.user_db import get_profile, login as login_db
 
 #Store 2FA codes
 codes = {}
 load_dotenv()
+SERVER_URL = "http://127.0.0.1:8080"
 
 def login(email, password): 
     """

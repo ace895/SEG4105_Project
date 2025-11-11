@@ -2,8 +2,8 @@ from pathlib import Path
 from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 
-from backend.app.db.meal_db import add_meal, edit_meal, get_meal_history, get_meals
-from backend.app.db.user_db import edit_dietary_info, edit_goal, get_profile, signup, toggle_notifications
+from app.db.meal_db import add_meal, edit_meal, get_meal_history, get_meals
+from app.db.user_db import edit_dietary_info, edit_goal, get_profile, signup, toggle_notifications
 
 from .utils.process_meal import process_image
 from .utils.utils import login, authenticate, get_recommendations, get_status
