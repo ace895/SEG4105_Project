@@ -10,10 +10,10 @@ interface NameFormModalProps {
 }
 
 export interface NameFormData {
-  name?: String;
+  name?: string;
 }
 
-export default function DietaryFormModal({ visible, onClose, onSave, initialData }: NameFormModalProps) {
+export default function NameFormModal({ visible, onClose, onSave, initialData }: NameFormModalProps) {
   const [formData, setFormData] = useState<NameFormData>(initialData ?? {});
 
   const handleChange = (field: keyof NameFormData, value: string) => {
@@ -33,10 +33,10 @@ export default function DietaryFormModal({ visible, onClose, onSave, initialData
           style={styles.modalContainer}
         >
           <View style={styles.modalCard}>
-            <Text style={styles.title}>Dietary Profile</Text>
+            <Text style={styles.title}>User Details</Text>
 
 
-            <Text style={styles.sectionTitle}>Height</Text>
+            <Text style={styles.sectionTitle}>Name</Text>
             <TextInput
               style={styles.input}
               placeholder="Enter name"

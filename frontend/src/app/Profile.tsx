@@ -2,10 +2,12 @@ import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import DietaryFormModal, { DietaryFormData } from '../components/DietaryFormModal';
+import GoalsFormModal from '../components/GoalsFormModal';
+import NameFormModal, {NameFormData} from '../components/NameFormModal';
 
 //Mock User Model
 interface User {
-  name: string;
+  name?: string;
   email: string;
   height?: number;
   weight?: number;
@@ -13,6 +15,7 @@ interface User {
   diet?: string;
   activity?: string;
   allergies?: string[];
+  goal?: string;
 }
 
 interface ProfileProps {
@@ -47,6 +50,24 @@ export default function Profile({ user: propUser }: { user?: User }) {
     }));
   };
 
+  const [nameModalVisible, setNameModalVisible] = useState(false);
+
+  const handleSaveName = (updated: NameFormData) => {
+  setUser((prev) => ({
+    ...prev,
+    ...updated,
+  }));
+};
+
+  const [goalModalVisible, setGoalModalVisible] = useState(false);
+
+  const handleSaveGoal = (goal: string) => {
+    setUser((prev) => ({
+      ...prev,
+      goal,
+    }));
+  };
+
   return (
     <SafeAreaView style={styles.safeArea}>
     <ScrollView contentContainerStyle={styles.container}>
@@ -54,12 +75,19 @@ export default function Profile({ user: propUser }: { user?: User }) {
       <View style={styles.section}>
         <View style={styles.userRow}>
           <View>
-            <Text style={styles.userName}>{user.name}</Text>
+            <Text style={styles.userName}>{user.name ?? "-"}</Text>
             <Text style={styles.userEmail}>{user.email}</Text>
           </View>
-          <TouchableOpacity style={styles.editButton}>
+          <TouchableOpacity style={styles.editButton} onPress={() => setNameModalVisible(true)}>
             <Text style={styles.editText}>Edit</Text>
           </TouchableOpacity>
+
+          <NameFormModal
+            visible={nameModalVisible}
+            onClose={() => setNameModalVisible(false)}
+            onSave={handleSaveName}           
+            initialData={{ name: user.name }}
+          />
         </View>
       </View>
 
@@ -93,11 +121,18 @@ export default function Profile({ user: propUser }: { user?: User }) {
       {/* Goals */}
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Goals</Text>
-        <Text style={styles.infoText}>Add height & weight to enable goals</Text>
+         <Text style={styles.infoText}>{user.goal ?? 'No goal selected'}</Text>
 
-        <TouchableOpacity style={styles.actionButton}>
+        <TouchableOpacity style={styles.actionButton} onPress={() => setGoalModalVisible(true)}>
           <Text style={styles.buttonText}>Add Goals</Text>
         </TouchableOpacity>
+
+        <GoalsFormModal
+          visible={goalModalVisible}
+          onClose={() => setGoalModalVisible(false)}
+          onSave={handleSaveGoal}
+          initialGoal={user.goal}
+        />
       </View>
 
       {/* Advanced Settings */}
