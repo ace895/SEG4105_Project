@@ -3,13 +3,14 @@ import { Ingredient } from './src/components/IngredientCard';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import Profile from './src/app/Profile';
 import RecommendationsPage from './src/app/Recommendations';
+import Dashboard from './src/app/Dashboard';
 
 
 
 export default function App() {
    return (
     <SafeAreaProvider>
-      <RecommendationsPage />
+      <Dashboard />
     </SafeAreaProvider>
   );
   //Just using App to test pages
