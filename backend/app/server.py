@@ -1,6 +1,10 @@
+import os
+import secrets
 from pathlib import Path
-from flask import Flask, request, jsonify, send_from_directory
+from dotenv import load_dotenv
+from flask import Flask, redirect, request, jsonify, send_from_directory, session, url_for
 from flask_cors import CORS
+from authlib.integrations.flask_client import OAuth
 
 from app.db.meal_db import add_meal, edit_meal, get_meal_history, get_meals
 from app.db.user_db import edit_dietary_info, edit_goal, get_profile, signup, toggle_notifications
@@ -8,8 +12,25 @@ from app.db.user_db import edit_dietary_info, edit_goal, get_profile, signup, to
 from .utils.process_meal import process_image
 from .utils.utils import login, authenticate, get_recommendations, get_status
 
+load_dotenv()
+
 app = Flask(__name__)
 CORS(app)
+app.secret_key = os.environ.get("SECRET_KEY", secrets.token_hex(32))
+
+#Initialize oauth providers (Google and Microsoft)
+oauth = OAuth(app)
+try:
+    google = oauth.register(
+        name="google",
+        client_id=os.getenv("GOOGLE_CLIENT_ID"),
+        client_secret=os.getenv("GOOGLE_CLIENT_SECRET"),
+        access_token_url="https://oauth2.googleapis.com/token",
+        authorize_url="https://accounts.google.com/o/oauth2/auth",
+        client_kwargs={"scope": "openid email profile"},
+    )
+except Exception as e:
+    print(f"OAuth not available: {e}")
 
 @app.route("/", methods=["GET"])
 def test():
@@ -21,10 +42,70 @@ def test():
     """
     return jsonify({"message": "Connected"}), 200
 
+@app.route("/auth/<provider>")
+def auth(provider):
+    """
+    Start OAuth login for a given provider e.g. Google
+
+    Query Parameters:
+        redirect_uri (str): The URI the user should be sent back to after login generated with
+                            AuthSession.makeRedirectUri()
+
+    Returns:
+        A redirect response that sends the user to the OAuth provider's login page.
+    """
+
+    oauth_provider = oauth.create_client(provider)
+    session["frontend_redirect"] = request.args.get("redirect_uri") #Store redirect URI
+    callback_uri = url_for("auth_callback", provider=provider, _external=True)
+
+    return oauth_provider.authorize_redirect(callback_uri)
+
+@app.route("/auth/<provider>/callback")
+def auth_callback(provider):
+    """
+    Callback for the OAuth provider to provide the user information
+
+    Returns:
+        Redirect response back to the frontend (Expo/web) application.
+    """
+
+    oauth_provider = oauth.create_client(provider)
+    token = oauth_provider.authorize_access_token()
+    
+    #Get user information in a session
+    user_info = oauth_provider.parse_id_token(token)
+    session["user"] = {
+        "id": user_info["sub"],
+        "email": user_info.get("email"),
+        "name": user_info.get("name"),
+    }
+
+    #Retrieve redirect URI 
+    frontend_redirect = session.pop("frontend_redirect", "/") 
+    return redirect(frontend_redirect)
+
+@app.route("/me")
+def me():
+    """
+    Provides user information if they signed in with a provider e.g. Google
+
+    Returns:
+        {
+            "id": 123456,
+            "email": "example@example.com",
+            "name": "John Doe"
+        }
+
+    """
+    if "user" in session:
+        return jsonify(session["user"])
+    return jsonify({"error": "Not logged in"}), 401
+
 @app.route("/login", methods=["POST"])
 def login_user():
     """
-    Logs in a user using email and password, or via third-party sign-in.
+    Logs in a user using email and password
 
     Request JSON:
         {
