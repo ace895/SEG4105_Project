@@ -9,7 +9,6 @@ export default function RecommendationsPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    console.log('🔍 baseUrl =', getServerUrl());
     const fetchRecommendations = async () => {
       try {
         const baseUrl = getServerUrl();
@@ -43,7 +42,7 @@ export default function RecommendationsPage() {
           <RecommendationCard
             key={i}
             recommendation={item}
-            onPress={() => console.log('Clicked:', item.name)}
+            onPress={() => console.log('Clicked:', item.name)} //Need to add link here
           />
         ))
       ) : (

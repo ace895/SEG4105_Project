@@ -1,5 +1,7 @@
+//Need to make cards touchable and send info to meal page to open up
 import React from 'react';
 import { View, Text, StyleSheet, Image } from 'react-native';
+
 
 export interface Meal {
   name: string;

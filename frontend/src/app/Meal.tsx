@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { View, ScrollView, StyleSheet, Image, Text } from 'react-native';
-import IngredientCard, {Ingredient} from '../components/IngredientCard';
+import IngredientCard, { Ingredient } from '../components/IngredientCard';
+import IngredientEditModal from '../components/EditIngredientModal';
 
 interface MealDetailsProps {
   ingredients: Ingredient[];
@@ -8,27 +9,68 @@ interface MealDetailsProps {
 }
 
 export default function MealDetails({ ingredients, imageUri }: MealDetailsProps) {
-  // Sum totals dynamically
-  const totalCalories = ingredients.reduce((sum, item) => sum + item.calories, 0);
-  const totalWeight = ingredients.reduce((sum, item) => sum + item.weight, 0);
-  const totalProteins = ingredients.reduce((sum, item) => sum + item.proteins, 0);
-  const totalFats = ingredients.reduce((sum, item) => sum + item.fats, 0);
-  const totalCarbs = ingredients.reduce((sum, item) => sum + item.carbs, 0);
+  const [ingredientList, setIngredientList] = useState<Ingredient[]>(ingredients);
+
+  const [editVisible, setEditVisible] = useState(false);
+  const [editingIndex, setEditingIndex] = useState<number | null>(null);
+  const [editingIngredient, setEditingIngredient] = useState<Ingredient | null>(null);
+
+  // Dynamic totals based on current ingredientList
+  const totalCalories = ingredientList.reduce((sum, item) => sum + item.calories, 0);
+  const totalWeight = ingredientList.reduce((sum, item) => sum + item.weight, 0);
+  const totalProteins = ingredientList.reduce((sum, item) => sum + item.proteins, 0);
+  const totalFats = ingredientList.reduce((sum, item) => sum + item.fats, 0);
+  const totalCarbs = ingredientList.reduce((sum, item) => sum + item.carbs, 0);
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
+      {/* Image */}
       {imageUri ? (
-    <Image source={{ uri: imageUri }} style={styles.image} />
-    ) : (
-    <View style={[styles.image, styles.placeholder]}>
-        <Text style={styles.placeholderText}>No image available</Text>
-    </View>
-    )}
+        <Image source={{ uri: imageUri }} style={styles.image} />
+      ) : (
+        <View style={[styles.image, styles.placeholder]}>
+          <Text style={styles.placeholderText}>No image available</Text>
+        </View>
+      )}
 
-      {ingredients.map((item, i) => (
-        <IngredientCard key={i} ingredient={item} />
+      {/* Ingredient Cards */}
+      {ingredientList.map((item, index) => (
+        <IngredientCard
+          key={index}
+          ingredient={item}
+          onEdit={() => {
+            setEditingIngredient(item);
+            setEditingIndex(index);
+            setEditVisible(true);
+          }}
+        />
       ))}
 
+      {/* Edit Ingredient Modal */}
+      {editingIngredient && (
+        <IngredientEditModal
+          visible={editVisible}
+          ingredient={editingIngredient}
+          onClose={() => setEditVisible(false)}
+          onSave={(updated) => {
+            if (editingIndex !== null) {
+              const updatedList = [...ingredientList];
+              updatedList[editingIndex] = {
+                ...updated,
+                calories: Number(updated.calories),
+                weight: Number(updated.weight),
+                proteins: Number(updated.proteins),
+                fats: Number(updated.fats),
+                carbs: Number(updated.carbs),
+              };
+              setIngredientList(updatedList);
+            }
+            setEditVisible(false);
+          }}
+        />
+      )}
+
+      {/* Totals */}
       <View style={styles.summary}>
         <View>
           <Text style={styles.summaryTitle}>Totals</Text>
@@ -53,20 +95,20 @@ const styles = StyleSheet.create({
     backgroundColor: '#f9f9f9',
   },
   image: {
-  width: '100%',
-  height: 180,
-  borderRadius: 12,
-  marginBottom: 15,
-},
-placeholder: {
-  backgroundColor: '#eee',
-  justifyContent: 'center',
-  alignItems: 'center',
-},
-placeholderText: {
-  color: '#777',
-  fontStyle: 'italic',
-},
+    width: '100%',
+    height: 180,
+    borderRadius: 12,
+    marginBottom: 15,
+  },
+  placeholder: {
+    backgroundColor: '#eee',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  placeholderText: {
+    color: '#777',
+    fontStyle: 'italic',
+  },
   summary: {
     backgroundColor: '#fff',
     borderRadius: 10,

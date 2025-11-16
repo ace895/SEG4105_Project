@@ -1,5 +1,6 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 
 export interface Ingredient {
   name: string;
@@ -12,28 +13,35 @@ export interface Ingredient {
 
 interface IngredientCardProps {
   ingredient: Ingredient;
+  onEdit?: () => void; 
 }
 
-export default function IngredientCard({ ingredient }: IngredientCardProps) {
+export default function IngredientCard({ ingredient, onEdit }: IngredientCardProps) {
   return (
     <View style={styles.card}>
-      <Text style={styles.name}>{ingredient.name}</Text>
+      <View style={{ flex: 1 }}>
+        <Text style={styles.name}>{ingredient.name}</Text>
 
-      <View style={styles.row}>
-        <View style={styles.badgeGreen}>
-          <Text style={styles.badgeText}>{ingredient.calories} cal</Text>
-        </View>
+        <View style={styles.row}>
+          <View style={styles.badgeGreen}>
+            <Text style={styles.badgeText}>{ingredient.calories} cal</Text>
+          </View>
 
-        <View style={styles.badgeBlue}>
-          <Text style={styles.badgeText}>{ingredient.weight}g</Text>
-        </View>
+          <View style={styles.badgeBlue}>
+            <Text style={styles.badgeText}>{ingredient.weight}g</Text>
+          </View>
 
-        <View style={styles.badgeRed}>
-          <Text style={styles.badgeTextSmall}>{ingredient.proteins}g proteins</Text>
-          <Text style={styles.badgeTextSmall}>{ingredient.fats}g fats</Text>
-          <Text style={styles.badgeTextSmall}>{ingredient.carbs}g carbs</Text>
+          <View style={styles.badgeRed}>
+            <Text style={styles.badgeTextSmall}>{ingredient.proteins}g proteins</Text>
+            <Text style={styles.badgeTextSmall}>{ingredient.fats}g fats</Text>
+            <Text style={styles.badgeTextSmall}>{ingredient.carbs}g carbs</Text>
+          </View>
         </View>
       </View>
+
+      <TouchableOpacity onPress={onEdit} style={styles.editButton}>
+        <Ionicons name="pencil" size={20} color="#666" />
+      </TouchableOpacity>
     </View>
   );
 }
@@ -48,6 +56,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.05,
     shadowOffset: { width: 0, height: 1 },
     shadowRadius: 3,
+    flexDirection: 'row',
   },
   name: {
     fontSize: 16,
@@ -86,5 +95,9 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '500',
     color: '#333',
+  },
+  editButton: {
+    justifyContent: 'center',
+    paddingLeft: 10,
   },
 });

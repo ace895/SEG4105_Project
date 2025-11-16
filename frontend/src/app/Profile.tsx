@@ -4,6 +4,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import DietaryFormModal, { DietaryFormData } from '../components/DietaryFormModal';
 import GoalsFormModal from '../components/GoalsFormModal';
 import NameFormModal, {NameFormData} from '../components/NameFormModal';
+import NotificationsModal from '../components/NotificationModal';
+import DeleteDataModal from '../components/DeleteDataModal';
 
 //Mock User Model
 interface User {
@@ -16,6 +18,7 @@ interface User {
   activity?: string;
   allergies?: string[];
   goal?: string;
+  notifcations_on: boolean;
 }
 
 interface ProfileProps {
@@ -35,6 +38,7 @@ export default function Profile({ user: propUser }: { user?: User }) {
     diet: 'Balanced',
     activity: 'Moderate',
     allergies: ['Peanuts', 'Dairy'],
+    notifcations_on: false,
   });
 
   const allergyList = user.allergies?.join(', ') || 'None';
@@ -67,6 +71,22 @@ export default function Profile({ user: propUser }: { user?: User }) {
       goal,
     }));
   };
+
+  const [notifModalVisible, setNotifModalVisible] = useState(false);
+  const handleSaveNotif = (enabled: boolean) => {
+  setUser(prev => ({ ...prev, notifications_on: enabled }));
+};
+
+const [deleteModalVisible, setDeleteModalVisible] = useState(false);
+
+const handleConfirmDelete = () => {
+  console.log("Deleting user data…");
+
+  // TODO: add fetch call to backend when endpoint exists
+  // fetch(`${baseUrl}/delete-data?email=${user.email}`, { method: "DELETE" })
+
+  setDeleteModalVisible(false);
+};
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -139,14 +159,27 @@ export default function Profile({ user: propUser }: { user?: User }) {
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Advanced Settings</Text>
 
-        <TouchableOpacity style={styles.linkRow}>
+        <TouchableOpacity style={styles.linkRow} onPress={() => setNotifModalVisible(true)}>
           <Text style={styles.linkText}>Notifications</Text>
           <Text style={styles.subText}>Manage reminders & meal alerts</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.linkRow}>
+        <NotificationsModal
+          visible={notifModalVisible}
+          onClose={() => setNotifModalVisible(false)}
+          onSave={handleSaveNotif}
+          initialOption={user.notifcations_on}
+        />
+
+        <TouchableOpacity style={styles.linkRow} onPress={() => setDeleteModalVisible(true)}>
           <Text style={[styles.linkText, { color: 'red' }]}>Delete Data</Text>
         </TouchableOpacity>
+
+        <DeleteDataModal
+        visible={deleteModalVisible}
+        onClose={() => setDeleteModalVisible(false)}
+        onConfirm={handleConfirmDelete}
+      />
       </View>
     </ScrollView>
     </SafeAreaView>
