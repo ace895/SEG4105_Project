@@ -8,30 +8,44 @@ import {
   TouchableOpacity,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { useLocalSearchParams } from "expo-router";
 
 import IngredientCard, { Ingredient } from "../components/IngredientCard";
 import IngredientEditModal from "../components/EditIngredientModal";
 import AddIngredientModal from "../components/AddIngredientModal";
 
-interface ReviewMealPageProps {
-  imageUri?: string;
-  ingredients?: Ingredient[]; // <-- made optional
-}
+export default function ReviewMealPage() {
+  // ------------------ READ PARAMS FROM ROUTER ------------------
+  const { imageUri, ingredients: ingredientString } = useLocalSearchParams();
 
-export default function ReviewMealPage({
-  imageUri = undefined,
-  ingredients: initialIngredients = [], // <-- DEFAULTS ADDED
-}: ReviewMealPageProps) {
-  const [ingredients, setIngredients] = useState<Ingredient[]>(initialIngredients);
+  // Parse ingredient JSON from navigation
+  let parsedIngredients: Ingredient[] = [];
+  try {
+    if (ingredientString && typeof ingredientString === "string") {
+      parsedIngredients = JSON.parse(ingredientString);
+    }
+  } catch (e) {
+    console.warn("Failed to parse ingredients:", e);
+    parsedIngredients = [];
+  }
 
+  // ------------------ LOCAL STATE ------------------
+  const [ingredients, setIngredients] = useState<Ingredient[]>(parsedIngredients);
   const [liked, setLiked] = useState<"up" | "down" | null>(null);
-
-  const [editingIngredient, setEditingIngredient] = useState<Ingredient | null>(
-    null
-  );
+  const [editingIngredient, setEditingIngredient] = useState<Ingredient | null>(null);
   const [editVisible, setEditVisible] = useState(false);
   const [addVisible, setAddVisible] = useState(false);
 
+  const safe = (arr: Ingredient[]) => (Array.isArray(arr) ? arr : []);
+
+  // ------------------ TOTALS ------------------
+  const totalCalories = safe(ingredients).reduce((s, i) => s + (i.calories || 0), 0);
+  const totalWeight = safe(ingredients).reduce((s, i) => s + (i.weight || 0), 0);
+  const totalProteins = safe(ingredients).reduce((s, i) => s + (i.proteins || 0), 0);
+  const totalFats = safe(ingredients).reduce((s, i) => s + (i.fats || 0), 0);
+  const totalCarbs = safe(ingredients).reduce((s, i) => s + (i.carbs || 0), 0);
+
+  // ------------------ EDITING ------------------
   const openEdit = (ingredient: Ingredient) => {
     setEditingIngredient(ingredient);
     setEditVisible(true);
@@ -47,18 +61,10 @@ export default function ReviewMealPage({
     setIngredients((prev) => [...prev, ing]);
   };
 
-  // ------------------ TOTALS ------------------ //
-  const safe = (arr: Ingredient[]) => (Array.isArray(arr) ? arr : []);
-
-  const totalCalories = safe(ingredients).reduce((s, i) => s + i.calories, 0);
-  const totalWeight = safe(ingredients).reduce((s, i) => s + i.weight, 0);
-  const totalProteins = safe(ingredients).reduce((s, i) => s + i.proteins, 0);
-  const totalFats = safe(ingredients).reduce((s, i) => s + i.fats, 0);
-  const totalCarbs = safe(ingredients).reduce((s, i) => s + i.carbs, 0);
-
+  // ------------------ RENDER ------------------
   return (
     <ScrollView contentContainerStyle={styles.container}>
-      {/* ------------------ HEADER ------------------ */}
+      {/* HEADER */}
       <View style={styles.headerRow}>
         <TouchableOpacity>
           <Ionicons name="arrow-back" size={28} color="#333" />
@@ -83,10 +89,10 @@ export default function ReviewMealPage({
         </View>
       </View>
 
-      {/* ------------------ IMAGE ------------------ */}
+      {/* IMAGE */}
       <View style={styles.imageWrapper}>
         {imageUri ? (
-          <Image source={{ uri: imageUri }} style={styles.image} />
+          <Image source={{ uri: imageUri as string }} style={styles.image} />
         ) : (
           <View style={[styles.image, styles.placeholder]}>
             <Text>No Image</Text>
@@ -94,7 +100,7 @@ export default function ReviewMealPage({
         )}
       </View>
 
-      {/* ------------------ INGREDIENTS ------------------ */}
+      {/* INGREDIENT CARDS */}
       <View style={{ marginTop: 10 }}>
         {ingredients.map((ing, index) => (
           <IngredientCard
@@ -105,7 +111,7 @@ export default function ReviewMealPage({
         ))}
       </View>
 
-      {/* ------------------ TOTALS SECTION ------------------ */}
+      {/* TOTALS */}
       <View style={styles.summaryRow}>
         <View style={styles.summaryColumn}>
           <Text style={styles.summaryTitle}>Totals</Text>
@@ -147,7 +153,7 @@ export default function ReviewMealPage({
         </View>
       </View>
 
-      {/* ------------------ BOTTOM BUTTON ROW ------------------ */}
+      {/* BUTTON ROW */}
       <View style={styles.bottomRow}>
         <TouchableOpacity style={styles.bottomButton}>
           <Ionicons name="camera-reverse" size={30} color="#27ae60" />
@@ -165,7 +171,7 @@ export default function ReviewMealPage({
         </TouchableOpacity>
       </View>
 
-      {/* ------------------ MODALS ------------------ */}
+      {/* MODALS */}
       {editingIngredient && (
         <IngredientEditModal
           visible={editVisible}
@@ -184,6 +190,7 @@ export default function ReviewMealPage({
   );
 }
 
+// ------------------ STYLES ------------------
 const styles = StyleSheet.create({
   container: {
     padding: 20,

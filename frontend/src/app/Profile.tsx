@@ -52,7 +52,13 @@ export default function Profile() {
 
         const data = await res.json();
         // Convert backend structure if needed
-        setUser(data);
+        setUser({
+          ...data,
+          email: userEmail,
+          allergies: typeof data.allergies === "string"
+            ? data.allergies.split(",").map((a: string) => a.trim()) // convert to array
+            : data.allergies ?? [], // ensure array
+        });
       } catch (err) {
         console.error("Profile fetch error:", err);
       } finally {
@@ -75,6 +81,31 @@ export default function Profile() {
 
   const allergyList = user.allergies?.join(", ") || "None";
 
+  const handleSaveNotif = async (enabled: boolean) => {
+  try {
+    const baseUrl = getServerUrl();
+
+    await fetch(`${baseUrl}/toggle-notifications`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        email: userEmail,
+        enabled, // send new setting
+      }),
+    });
+
+    // Update UI state after backend success
+    setUser(prev => ({
+      ...prev!,
+      notifications_on: enabled,
+    }));
+
+  } catch (err) {
+    console.error("Failed to update notifications:", err);
+  }
+};
+
+
   // ---------------------- UPDATE HANDLERS ----------------------
   const handleSaveDietary = (updated: DietaryFormData) => {
     setUser(prev => ({
@@ -91,19 +122,30 @@ export default function Profile() {
     }));
   };
 
-  const handleSaveGoal = (goal: string) => {
+  const handleSaveGoal = async (goal: string) => {
+  try {
+    const baseUrl = getServerUrl();
+
+    await fetch(`${baseUrl}/edit-goal`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        email: userEmail,
+        goal,
+      }),
+    });
+
+    // Update local UI version
     setUser(prev => ({
       ...prev!,
       goal,
     }));
-  };
 
-  const handleSaveNotif = (enabled: boolean) => {
-    setUser(prev => ({
-      ...prev!,
-      notifications_on: enabled,
-    }));
-  };
+  } catch (err) {
+    console.error("Failed to update goal:", err);
+  }
+};
+
 
   const handleConfirmDelete = () => {
     console.log("Deleting user data…");
@@ -140,10 +182,7 @@ export default function Profile() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Dietary Profile</Text>
           <Text style={styles.infoText}>
-            Height: {user.height ?? "-"}   Weight: {user.weight ?? "-"}   Age: {user.age ?? "-"}
-          </Text>
-          <Text style={styles.infoText}>
-            Diet: {user.diet ?? "-"}   Activity: {user.activity ?? "-"}
+            Height: {user.height ?? "-"}cm   Weight: {user.weight ?? "-"}kg   Age: {user.age ?? "-"}
           </Text>
           <Text style={styles.infoText}>Allergies: {allergyList}</Text>
 
@@ -161,6 +200,7 @@ export default function Profile() {
               age: user.age,
               allergies: user.allergies?.join(", "),
             }}
+            userEmail={user.email}
           />
         </View>
 

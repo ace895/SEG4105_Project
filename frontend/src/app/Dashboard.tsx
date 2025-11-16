@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, Modal } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from "expo-router";
+import * as ImagePicker from "expo-image-picker";
 
 interface MacroData {
   name: string;
@@ -157,12 +158,17 @@ const fetchDailyData = async (week: string, date: number): Promise<DailyData> =>
   return weekData[date] || weekData[6];
 };
 
+
+
+
 export default function Dashboard() {
   const [selectedWeek, setSelectedWeek] = useState('This Week');
   const [selectedDate, setSelectedDate] = useState(6);
   const [showWeekPicker, setShowWeekPicker] = useState(false);
   const [dailyData, setDailyData] = useState<DailyData | null>(null);
   const [loading, setLoading] = useState(true);
+
+  const [showPickerModal, setShowPickerModal] = useState(false);
   
   const weekOptions = ['This Week', 'Last Week', '2 Weeks Ago', '3 Weeks Ago', '4 Weeks Ago'];
   
@@ -185,6 +191,44 @@ export default function Dashboard() {
     };
     loadData();
   }, [selectedWeek, selectedDate]);
+
+
+  //Camera
+   const openCamera = async () => {
+    const permission = await ImagePicker.requestCameraPermissionsAsync();
+    if (permission.status !== "granted") {
+      alert("Camera permission is required.");
+      return;
+    }
+
+    const result = await ImagePicker.launchCameraAsync({
+      allowsEditing: true,
+      quality: 0.7,
+    });
+
+    if (!result.canceled) {
+      router.push({
+        pathname: "/reviewMeal",
+        params: { imageUri: result.assets[0].uri }
+      });
+    }
+  };
+
+  //Gallery
+
+  const openGallery = async () => {
+    const result = await ImagePicker.launchImageLibraryAsync({
+      allowsEditing: true,
+      quality: 0.7,
+    });
+
+    if (!result.canceled) {
+      router.push({
+        pathname: "/reviewMeal",
+        params: { imageUri: result.assets[0].uri }
+      });
+    }
+  };
 
   const handleWeekSelect = (week: string) => {
     setSelectedWeek(week);
@@ -215,7 +259,7 @@ export default function Dashboard() {
               <Text style={styles.calorieSubtext}>Calories today</Text>
             </View>
 
-            <TouchableOpacity style={styles.addMealButton}>
+            <TouchableOpacity style={styles.addMealButton} onPress={() => setShowPickerModal(true)}>
               <Text style={styles.addMealText}>Add a Meal</Text>
             </TouchableOpacity>
 
@@ -306,6 +350,42 @@ export default function Dashboard() {
           </>
         )}
       </ScrollView>
+
+      
+      <Modal visible={showPickerModal} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalBox}>
+            <Text style={styles.modalTitle}>Add Meal From</Text>
+
+            <TouchableOpacity
+              style={styles.modalBtn}
+              onPress={() => {
+                setShowPickerModal(false);
+                openCamera();
+              }}
+            >
+              <Text style={styles.modalText}>Take Photo</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.modalBtn}
+              onPress={() => {
+                setShowPickerModal(false);
+                openGallery();
+              }}
+            >
+              <Text style={styles.modalText}>Choose from Gallery</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.modalBtn, styles.cancelBtn]}
+              onPress={() => setShowPickerModal(false)}
+            >
+              <Text style={[styles.modalText, { color: "red" }]}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -497,5 +577,38 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 18,
     fontWeight: '600',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  modalBox: {
+    backgroundColor: "#fff",
+    width: "80%",
+    padding: 20,
+    borderRadius: 15,
+    alignItems: "center",
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: "700",
+    marginBottom: 15,
+  },
+  modalBtn: {
+    paddingVertical: 12,
+    width: "100%",
+    alignItems: "center",
+    borderBottomWidth: 1,
+    borderColor: "#ddd",
+  },
+  modalText: {
+    fontSize: 18,
+    fontWeight: "500",
+  },
+  cancelBtn: {
+    borderBottomWidth: 0,
+    marginTop: 10,
   },
 });

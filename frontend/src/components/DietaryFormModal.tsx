@@ -1,12 +1,14 @@
 import React, { useState } from 'react';
 import { Modal, View, Text, TextInput, TouchableOpacity, StyleSheet, KeyboardAvoidingView, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { getServerUrl } from "../utils/api";
 
 interface DietaryFormModalProps {
   visible: boolean;
   onClose: () => void;
   onSave: (updated: DietaryFormData) => void;
   initialData?: DietaryFormData;
+  userEmail: string;     // ← REQUIRED FOR BACKEND
 }
 
 export interface DietaryFormData {
@@ -16,27 +18,52 @@ export interface DietaryFormData {
   allergies?: string;
 }
 
-export default function DietaryFormModal({ visible, onClose, onSave, initialData }: DietaryFormModalProps) {
+export default function DietaryFormModal({ 
+  visible, 
+  onClose, 
+  onSave, 
+  initialData,
+  userEmail
+}: DietaryFormModalProps) {
+
   const [formData, setFormData] = useState<DietaryFormData>(initialData ?? {});
+  const [saving, setSaving] = useState(false);
 
   const handleChange = (field: keyof DietaryFormData, value: string) => {
-  // Only allow digits for numeric fields
-  if (['height', 'weight', 'age'].includes(field)) {
-    // Remove non-digit characters
-    const numeric = value.replace(/[^0-9]/g, '');
+    if (['height', 'weight', 'age'].includes(field)) {
+      const numeric = value.replace(/[^0-9]/g, '');
+      const parsed = numeric === '' ? undefined : Math.max(1, parseInt(numeric, 10));
+      setFormData({ ...formData, [field]: parsed });
+    } else {
+      setFormData({ ...formData, [field]: value });
+    }
+  };
 
-    const parsed = numeric === '' ? undefined : Math.max(1, parseInt(numeric, 10));
+  const handleSave = async () => {
+    setSaving(true);
 
-    setFormData({ ...formData, [field]: parsed });
-  } else {
-    // For non-numeric fields 
-    setFormData({ ...formData, [field]: value });
-  }
-};
+    try {
+      const baseUrl = getServerUrl();
 
-  const handleSave = () => {
-    onSave(formData);
-    onClose();
+      await fetch(`${baseUrl}/edit-dietary-info`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: userEmail,
+          height: formData.height,
+          weight: formData.weight,
+          age: formData.age,
+          allergies: formData.allergies
+        })
+      });
+
+      onSave(formData);
+      onClose();
+    } catch (error) {
+      console.error("Failed to update dietary info:", error);
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -49,7 +76,6 @@ export default function DietaryFormModal({ visible, onClose, onSave, initialData
           <View style={styles.modalCard}>
             <Text style={styles.title}>Dietary Profile</Text>
 
-
             <Text style={styles.sectionTitle}>Height</Text>
             <TextInput
               style={styles.input}
@@ -59,7 +85,6 @@ export default function DietaryFormModal({ visible, onClose, onSave, initialData
               onChangeText={(v) => handleChange('height', v)}
             />
 
-            
             <Text style={styles.sectionTitle}>Weight</Text>
             <TextInput
               style={styles.input}
@@ -91,8 +116,14 @@ export default function DietaryFormModal({ visible, onClose, onSave, initialData
                 <Text style={styles.buttonText}>Cancel</Text>
               </TouchableOpacity>
 
-              <TouchableOpacity style={[styles.button, styles.save]} onPress={handleSave}>
-                <Text style={[styles.buttonText, { color: 'white' }]}>Save Details</Text>
+              <TouchableOpacity 
+                style={[styles.button, styles.save]} 
+                onPress={handleSave}
+                disabled={saving}
+              >
+                <Text style={[styles.buttonText, { color: 'white' }]}>
+                  {saving ? "Saving..." : "Save Details"}
+                </Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -123,6 +154,11 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginBottom: 15,
   },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 6,
+  },
   input: {
     borderWidth: 1,
     borderColor: '#ccc',
@@ -149,10 +185,5 @@ const styles = StyleSheet.create({
   },
   buttonText: {
     fontWeight: '600',
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    marginBottom: 10,
   },
 });
