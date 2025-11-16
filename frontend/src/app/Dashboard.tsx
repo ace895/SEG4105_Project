@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Modal, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { router } from "expo-router";
 
 interface MacroData {
   name: string;
@@ -197,7 +198,7 @@ export default function Dashboard() {
           <TouchableOpacity>
             <Ionicons name="menu" size={28} color="#333" />
           </TouchableOpacity>
-          <TouchableOpacity>
+          <TouchableOpacity onPress={() => router.push("/profile")}> 
             <Ionicons name="person-circle-outline" size={36} color="#333" />
           </TouchableOpacity>
         </View>

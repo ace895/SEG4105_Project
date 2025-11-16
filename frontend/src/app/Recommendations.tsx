@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { View, ScrollView, Text, StyleSheet, ActivityIndicator } from 'react-native';
-import { getServerUrl } from '../../utils/api';  //IP helper for expo go
+import { getServerUrl } from '../utils/api';  //IP helper for expo go
 import RecommendationCard, { Recommendation } from '../components/RecommendationCard';
 import { SafeAreaView } from 'react-native-safe-area-context';
 

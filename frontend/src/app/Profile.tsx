@@ -1,13 +1,21 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import DietaryFormModal, { DietaryFormData } from '../components/DietaryFormModal';
-import GoalsFormModal from '../components/GoalsFormModal';
-import NameFormModal, {NameFormData} from '../components/NameFormModal';
-import NotificationsModal from '../components/NotificationModal';
-import DeleteDataModal from '../components/DeleteDataModal';
+import React, { useEffect, useState } from "react";
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  ScrollView,
+  ActivityIndicator,
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { getServerUrl } from "../utils/api";
 
-//Mock User Model
+import DietaryFormModal, { DietaryFormData } from "../components/DietaryFormModal";
+import GoalsFormModal from "../components/GoalsFormModal";
+import NameFormModal, { NameFormData } from "../components/NameFormModal";
+import NotificationsModal from "../components/NotificationModal";
+import DeleteDataModal from "../components/DeleteDataModal";
+
 interface User {
   name?: string;
   email: string;
@@ -18,173 +26,193 @@ interface User {
   activity?: string;
   allergies?: string[];
   goal?: string;
-  notifcations_on: boolean;
+  notifications_on: boolean;
 }
 
-interface ProfileProps {
-  user: User;
-}
+export default function Profile() {
+  const userEmail = "john.doe@example.com"; // TODO: pull from login or storage
 
-export default function Profile({ user: propUser }: { user?: User }) {
-  const [user, setUser] = useState<User>(
-    propUser ?? 
-    //Mock User for Testing
-    {
-    name: 'John Doe',
-    email: 'john.doe@example.com',
-    height: 175,
-    weight: 70,
-    age: 25,
-    diet: 'Balanced',
-    activity: 'Moderate',
-    allergies: ['Peanuts', 'Dairy'],
-    notifcations_on: false,
-  });
-
-  const allergyList = user.allergies?.join(', ') || 'None';
+  const [user, setUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState(true);
 
   const [modalVisible, setModalVisible] = useState(false);
+  const [nameModalVisible, setNameModalVisible] = useState(false);
+  const [goalModalVisible, setGoalModalVisible] = useState(false);
+  const [notifModalVisible, setNotifModalVisible] = useState(false);
+  const [deleteModalVisible, setDeleteModalVisible] = useState(false);
 
+  // ---------------------- FETCH PROFILE ----------------------
+  useEffect(() => {
+    const fetchProfile = async () => {
+      try {
+        const baseUrl = getServerUrl();
+        const res = await fetch(`${baseUrl}/get-profile?email=${userEmail}`);
+
+        if (!res.ok) throw new Error("Failed to load profile");
+
+        const data = await res.json();
+        // Convert backend structure if needed
+        setUser(data);
+      } catch (err) {
+        console.error("Profile fetch error:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchProfile();
+  }, []);
+
+  if (loading || !user) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
+          <ActivityIndicator size="large" />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  const allergyList = user.allergies?.join(", ") || "None";
+
+  // ---------------------- UPDATE HANDLERS ----------------------
   const handleSaveDietary = (updated: DietaryFormData) => {
-    // merge new data into user state
-    setUser((prev) => ({
-      ...prev,
+    setUser(prev => ({
+      ...prev!,
       ...updated,
-      allergies: updated.allergies?.split(',').map((a) => a.trim()) || [],
+      allergies: updated.allergies?.split(",").map(a => a.trim()) || [],
     }));
   };
 
-  const [nameModalVisible, setNameModalVisible] = useState(false);
-
   const handleSaveName = (updated: NameFormData) => {
-  setUser((prev) => ({
-    ...prev,
-    ...updated,
-  }));
-};
-
-  const [goalModalVisible, setGoalModalVisible] = useState(false);
+    setUser(prev => ({
+      ...prev!,
+      ...updated,
+    }));
+  };
 
   const handleSaveGoal = (goal: string) => {
-    setUser((prev) => ({
-      ...prev,
+    setUser(prev => ({
+      ...prev!,
       goal,
     }));
   };
 
-  const [notifModalVisible, setNotifModalVisible] = useState(false);
   const handleSaveNotif = (enabled: boolean) => {
-  setUser(prev => ({ ...prev, notifications_on: enabled }));
-};
+    setUser(prev => ({
+      ...prev!,
+      notifications_on: enabled,
+    }));
+  };
 
-const [deleteModalVisible, setDeleteModalVisible] = useState(false);
+  const handleConfirmDelete = () => {
+    console.log("Deleting user data…");
+    setDeleteModalVisible(false);
+  };
 
-const handleConfirmDelete = () => {
-  console.log("Deleting user data…");
-
-  // TODO: add fetch call to backend when endpoint exists
-  // fetch(`${baseUrl}/delete-data?email=${user.email}`, { method: "DELETE" })
-
-  setDeleteModalVisible(false);
-};
-
+  // ---------------------- UI ----------------------
   return (
     <SafeAreaView style={styles.safeArea}>
-    <ScrollView contentContainerStyle={styles.container}>
-      {/* User Info */}
-      <View style={styles.section}>
-        <View style={styles.userRow}>
-          <View>
-            <Text style={styles.userName}>{user.name ?? "-"}</Text>
-            <Text style={styles.userEmail}>{user.email}</Text>
+      <ScrollView contentContainerStyle={styles.container}>
+
+        {/* USER INFO */}
+        <View style={styles.section}>
+          <View style={styles.userRow}>
+            <View>
+              <Text style={styles.userName}>{user.name ?? "-"}</Text>
+              <Text style={styles.userEmail}>{user.email}</Text>
+            </View>
+
+            <TouchableOpacity style={styles.editButton} onPress={() => setNameModalVisible(true)}>
+              <Text style={styles.editText}>Edit</Text>
+            </TouchableOpacity>
+
+            <NameFormModal
+              visible={nameModalVisible}
+              onClose={() => setNameModalVisible(false)}
+              onSave={handleSaveName}
+              initialData={{ name: user.name }}
+            />
           </View>
-          <TouchableOpacity style={styles.editButton} onPress={() => setNameModalVisible(true)}>
-            <Text style={styles.editText}>Edit</Text>
+        </View>
+
+        {/* DIETARY PROFILE */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Dietary Profile</Text>
+          <Text style={styles.infoText}>
+            Height: {user.height ?? "-"}   Weight: {user.weight ?? "-"}   Age: {user.age ?? "-"}
+          </Text>
+          <Text style={styles.infoText}>
+            Diet: {user.diet ?? "-"}   Activity: {user.activity ?? "-"}
+          </Text>
+          <Text style={styles.infoText}>Allergies: {allergyList}</Text>
+
+          <TouchableOpacity style={styles.actionButton} onPress={() => setModalVisible(true)}>
+            <Text style={styles.buttonText}>Edit Details</Text>
           </TouchableOpacity>
 
-          <NameFormModal
-            visible={nameModalVisible}
-            onClose={() => setNameModalVisible(false)}
-            onSave={handleSaveName}           
-            initialData={{ name: user.name }}
+          <DietaryFormModal
+            visible={modalVisible}
+            onClose={() => setModalVisible(false)}
+            onSave={handleSaveDietary}
+            initialData={{
+              height: user.height,
+              weight: user.weight,
+              age: user.age,
+              allergies: user.allergies?.join(", "),
+            }}
           />
         </View>
-      </View>
 
-      {/* Dietary Profile */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Dietary Profile</Text>
-        <Text style={styles.infoText}>
-          Height: {user.height ?? '-'}   Weight: {user.weight ?? '-'}   Age: {user.age ?? '-'}
-        </Text>
-        <Text style={styles.infoText}>
-          Diet: {user.diet ?? '-'}   Activity: {user.activity ?? '-'}
-        </Text>
-        <Text style={styles.infoText}>Allergies: {allergyList}</Text>
+        {/* GOALS */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Goals</Text>
+          <Text style={styles.infoText}>{user.goal ?? "No goal selected"}</Text>
 
-        <TouchableOpacity style={styles.actionButton} onPress={() => setModalVisible(true)}>
-          <Text style={styles.buttonText}>Edit Details</Text>
-        </TouchableOpacity>
-        <DietaryFormModal
-          visible={modalVisible}
-          onClose={() => setModalVisible(false)}
-          onSave={handleSaveDietary}
-          initialData={{
-            height: user.height,
-            weight: user.weight,
-            age: user.age,
-            allergies: user.allergies?.join(', '),
-          }}
-        />
-      </View>
+          <TouchableOpacity style={styles.actionButton} onPress={() => setGoalModalVisible(true)}>
+            <Text style={styles.buttonText}>Add Goals</Text>
+          </TouchableOpacity>
 
-      {/* Goals */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Goals</Text>
-         <Text style={styles.infoText}>{user.goal ?? 'No goal selected'}</Text>
+          <GoalsFormModal
+            visible={goalModalVisible}
+            onClose={() => setGoalModalVisible(false)}
+            onSave={handleSaveGoal}
+            initialGoal={user.goal}
+          />
+        </View>
 
-        <TouchableOpacity style={styles.actionButton} onPress={() => setGoalModalVisible(true)}>
-          <Text style={styles.buttonText}>Add Goals</Text>
-        </TouchableOpacity>
+        {/* ADVANCED SETTINGS */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Advanced Settings</Text>
 
-        <GoalsFormModal
-          visible={goalModalVisible}
-          onClose={() => setGoalModalVisible(false)}
-          onSave={handleSaveGoal}
-          initialGoal={user.goal}
-        />
-      </View>
+          <TouchableOpacity style={styles.linkRow} onPress={() => setNotifModalVisible(true)}>
+            <Text style={styles.linkText}>Notifications</Text>
+            <Text style={styles.subText}>Manage reminders & meal alerts</Text>
+          </TouchableOpacity>
 
-      {/* Advanced Settings */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Advanced Settings</Text>
+          <NotificationsModal
+            visible={notifModalVisible}
+            onClose={() => setNotifModalVisible(false)}
+            onSave={handleSaveNotif}
+            initialOption={user.notifications_on}
+          />
 
-        <TouchableOpacity style={styles.linkRow} onPress={() => setNotifModalVisible(true)}>
-          <Text style={styles.linkText}>Notifications</Text>
-          <Text style={styles.subText}>Manage reminders & meal alerts</Text>
-        </TouchableOpacity>
+          <TouchableOpacity style={styles.linkRow} onPress={() => setDeleteModalVisible(true)}>
+            <Text style={[styles.linkText, { color: "red" }]}>Delete Data</Text>
+          </TouchableOpacity>
 
-        <NotificationsModal
-          visible={notifModalVisible}
-          onClose={() => setNotifModalVisible(false)}
-          onSave={handleSaveNotif}
-          initialOption={user.notifcations_on}
-        />
+          <DeleteDataModal
+            visible={deleteModalVisible}
+            onClose={() => setDeleteModalVisible(false)}
+            onConfirm={handleConfirmDelete}
+          />
+        </View>
 
-        <TouchableOpacity style={styles.linkRow} onPress={() => setDeleteModalVisible(true)}>
-          <Text style={[styles.linkText, { color: 'red' }]}>Delete Data</Text>
-        </TouchableOpacity>
-
-        <DeleteDataModal
-        visible={deleteModalVisible}
-        onClose={() => setDeleteModalVisible(false)}
-        onConfirm={handleConfirmDelete}
-      />
-      </View>
-    </ScrollView>
+      </ScrollView>
     </SafeAreaView>
   );
 }
+
 
 
 const styles = StyleSheet.create({

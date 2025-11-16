@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { View, ScrollView, StyleSheet, Image, Text } from 'react-native';
-import IngredientCard, { Ingredient } from '../components/IngredientCard';
-import IngredientEditModal from '../components/EditIngredientModal';
+import IngredientCard, { Ingredient } from '../../components/IngredientCard';
+import IngredientEditModal from '../../components/EditIngredientModal';
 
 interface MealDetailsProps {
   ingredients: Ingredient[];

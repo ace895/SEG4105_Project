@@ -15,14 +15,14 @@ import AddIngredientModal from "../components/AddIngredientModal";
 
 interface ReviewMealPageProps {
   imageUri?: string;
-  ingredients: Ingredient[];
+  ingredients?: Ingredient[]; // <-- made optional
 }
 
 export default function ReviewMealPage({
-  imageUri,
-  ingredients: initialIngredients,
+  imageUri = undefined,
+  ingredients: initialIngredients = [], // <-- DEFAULTS ADDED
 }: ReviewMealPageProps) {
-  const [ingredients, setIngredients] = useState(initialIngredients);
+  const [ingredients, setIngredients] = useState<Ingredient[]>(initialIngredients);
 
   const [liked, setLiked] = useState<"up" | "down" | null>(null);
 
@@ -48,11 +48,13 @@ export default function ReviewMealPage({
   };
 
   // ------------------ TOTALS ------------------ //
-  const totalCalories = ingredients.reduce((s, i) => s + i.calories, 0);
-  const totalWeight = ingredients.reduce((s, i) => s + i.weight, 0);
-  const totalProteins = ingredients.reduce((s, i) => s + i.proteins, 0);
-  const totalFats = ingredients.reduce((s, i) => s + i.fats, 0);
-  const totalCarbs = ingredients.reduce((s, i) => s + i.carbs, 0);
+  const safe = (arr: Ingredient[]) => (Array.isArray(arr) ? arr : []);
+
+  const totalCalories = safe(ingredients).reduce((s, i) => s + i.calories, 0);
+  const totalWeight = safe(ingredients).reduce((s, i) => s + i.weight, 0);
+  const totalProteins = safe(ingredients).reduce((s, i) => s + i.proteins, 0);
+  const totalFats = safe(ingredients).reduce((s, i) => s + i.fats, 0);
+  const totalCarbs = safe(ingredients).reduce((s, i) => s + i.carbs, 0);
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
@@ -123,7 +125,6 @@ export default function ReviewMealPage({
           <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
             <Text style={styles.summaryTitle}>Macro-nutrients</Text>
 
-            {/* Floating Add Ingredient Button */}
             <TouchableOpacity
               onPress={() => setAddVisible(true)}
               style={styles.addCircle}
@@ -188,8 +189,6 @@ const styles = StyleSheet.create({
     padding: 20,
     backgroundColor: "#F7F7F7",
   },
-
-  /* HEADER */
   headerRow: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -197,46 +196,36 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     marginTop: 20,
   },
-
   thumbsRow: {
     flexDirection: "row",
     alignItems: "center",
   },
-
-  /* IMAGE */
   imageWrapper: {
     alignItems: "center",
   },
-
   image: {
     width: "80%",
     height: 180,
     borderRadius: 12,
   },
-
   placeholder: {
     backgroundColor: "#ddd",
     justifyContent: "center",
     alignItems: "center",
   },
-
-  /* SUMMARY */
   summaryRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     marginTop: 20,
   },
-
   summaryColumn: {
     width: "48%",
   },
-
   summaryTitle: {
     fontSize: 18,
     fontWeight: "700",
     marginBottom: 10,
   },
-
   greenBadgeLarge: {
     backgroundColor: "#d9f8e3",
     padding: 12,
@@ -244,36 +233,30 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 10,
   },
-
   blueBadgeLarge: {
     backgroundColor: "#e3f0f9",
     padding: 12,
     borderRadius: 12,
     alignItems: "center",
   },
-
   summaryNumber: {
     fontSize: 22,
     fontWeight: "700",
     color: "#222",
   },
-
   summaryLabel: {
     color: "#555",
   },
-
   macroBadge: {
     backgroundColor: "#f9e3e3",
     padding: 10,
     borderRadius: 10,
     marginBottom: 8,
   },
-
   macroLabelLarge: {
     fontSize: 16,
     fontWeight: "700",
   },
-
   addCircle: {
     backgroundColor: "#a76df2",
     width: 35,
@@ -283,20 +266,16 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 5,
   },
-
-  /* BOTTOM BUTTONS */
   bottomRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     marginTop: 30,
     marginBottom: 20,
   },
-
   bottomButton: {
     alignItems: "center",
     width: "30%",
   },
-
   bottomLabel: {
     marginTop: 6,
     color: "#444",
