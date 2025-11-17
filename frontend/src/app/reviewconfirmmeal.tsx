@@ -13,9 +13,14 @@ import { useLocalSearchParams } from "expo-router";
 import IngredientCard, { Ingredient } from "../components/IngredientCard";
 import IngredientEditModal from "../components/EditIngredientModal";
 import AddIngredientModal from "../components/AddIngredientModal";
+import { useUser } from "../context/UserContext";
+import { getServerUrl } from "../utils/api";
+import { router } from "expo-router";
+
 
 export default function ReviewMealPage() {
-  // ------------------ READ PARAMS FROM ROUTER ------------------
+  const { email: userEmail } = useUser();
+
   const { imageUri, ingredients: ingredientString } = useLocalSearchParams();
 
   // Parse ingredient JSON from navigation
@@ -29,7 +34,7 @@ export default function ReviewMealPage() {
     parsedIngredients = [];
   }
 
-  // ------------------ LOCAL STATE ------------------
+
   const [ingredients, setIngredients] = useState<Ingredient[]>(parsedIngredients);
   const [liked, setLiked] = useState<"up" | "down" | null>(null);
   const [editingIngredient, setEditingIngredient] = useState<Ingredient | null>(null);
@@ -38,14 +43,14 @@ export default function ReviewMealPage() {
 
   const safe = (arr: Ingredient[]) => (Array.isArray(arr) ? arr : []);
 
-  // ------------------ TOTALS ------------------
+  // TOTALS 
   const totalCalories = safe(ingredients).reduce((s, i) => s + (i.calories || 0), 0);
   const totalWeight = safe(ingredients).reduce((s, i) => s + (i.weight || 0), 0);
   const totalProteins = safe(ingredients).reduce((s, i) => s + (i.proteins || 0), 0);
   const totalFats = safe(ingredients).reduce((s, i) => s + (i.fats || 0), 0);
   const totalCarbs = safe(ingredients).reduce((s, i) => s + (i.carbs || 0), 0);
 
-  // ------------------ EDITING ------------------
+
   const openEdit = (ingredient: Ingredient) => {
     setEditingIngredient(ingredient);
     setEditVisible(true);
@@ -61,12 +66,63 @@ export default function ReviewMealPage() {
     setIngredients((prev) => [...prev, ing]);
   };
 
-  // ------------------ RENDER ------------------
+  const handleDone = async () => {
+  if (!userEmail) {
+    alert("No user email found — please log in again.");
+    return;
+  }
+
+  // Convert ingredient array → backend expected object
+  const ingredientObject: any = {};
+  ingredients.forEach((i) => {
+    ingredientObject[i.name] = {
+      calorie: i.calories,
+      protein: i.proteins,
+      fat: i.fats,
+      carb: i.carbs,
+      weight: i.weight,
+    };
+  });
+
+  const payload = {
+    email: userEmail,
+    time: new Date().toISOString(),
+    ingredients: ingredientObject,
+    edited: false,        // or replace with your logic
+    before_edit: {},
+    after_edit: ingredientObject,
+  };
+
+  try {
+    const res = await fetch(`${getServerUrl()}/add-meal`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    });
+
+    const data = await res.json();
+    console.log("Add meal response:", data);
+
+    if (res.ok && data.success) {
+      alert("Meal saved successfully!");
+      router.push("/dashboard");
+    } else {
+      alert("Failed to save meal.");
+    }
+  } catch (err) {
+    console.error("Error saving meal:", err);
+    alert("Network error — could not save meal.");
+  }
+};
+
+
   return (
     <ScrollView contentContainerStyle={styles.container}>
       {/* HEADER */}
       <View style={styles.headerRow}>
-        <TouchableOpacity>
+        <TouchableOpacity onPress={() => router.push("/dashboard")}>
           <Ionicons name="arrow-back" size={28} color="#333" />
         </TouchableOpacity>
 
@@ -165,10 +221,11 @@ export default function ReviewMealPage() {
           <Text style={styles.bottomLabel}>Add Photo</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.bottomButton}>
+        <TouchableOpacity style={styles.bottomButton} onPress={handleDone}>
           <Ionicons name="checkmark-circle" size={30} color="#e67e22" />
           <Text style={styles.bottomLabel}>Done</Text>
         </TouchableOpacity>
+
       </View>
 
       {/* MODALS */}
@@ -190,7 +247,7 @@ export default function ReviewMealPage() {
   );
 }
 
-// ------------------ STYLES ------------------
+
 const styles = StyleSheet.create({
   container: {
     padding: 20,

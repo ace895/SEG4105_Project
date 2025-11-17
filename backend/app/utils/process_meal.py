@@ -10,6 +10,8 @@ import os
 import torch
 from dotenv import load_dotenv
 
+
+
 load_dotenv()
 USE_AWS=False
 USDA_API_KEY = os.getenv("USDA_API_KEY")
@@ -332,6 +334,19 @@ def estimate_weights(image_path, detected_ingredients):
 
     return weights
 
+import math
+
+def to_python_number(value):
+    """Convert numpy numbers → Python float. Replace NaN/inf with None."""
+  
+    if hasattr(value, "item"):
+        value = value.item()
+
+    if isinstance(value, float) and (math.isnan(value) or math.isinf(value)):
+        return None
+
+    return value
+
 def process_image(image_path):
     """
     Runs ingredient detection and nutrition lookup, then returns results.
@@ -352,11 +367,22 @@ def process_image(image_path):
 
     #Structure output
     results = {}
-    for ingrediant in detected:
-        nutrition = get_nutrition(ingrediant)
-        if nutrition:
-            nutrition["weight"] = weights.get(ingrediant, 35)
-            results[ingrediant] = nutrition
+
+    for ingredient in detected:
+        nutrition = get_nutrition(ingredient)
+
+        # If USDA gives nothing, skip
+        if not nutrition:
+            continue
+
+
+        cleaned_nutrition = {
+            k: to_python_number(v) for k, v in nutrition.items()
+        }
+
+        cleaned_nutrition["weight"] = to_python_number(weights.get(ingredient))
+
+        results[ingredient] = cleaned_nutrition
 
     return results
 

@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, TextInput, TouchableOpacity, Alert, Image } fro
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { getServerUrl } from '../utils/api';
+import { useUser } from '../context/UserContext';
 
 interface LoginProps {
   onNavigateToSignUp?: () => void;
@@ -11,7 +12,9 @@ interface LoginProps {
 }
 
 export default function Login({ onNavigateToSignUp, onLoginSuccess, onForgotPassword }: LoginProps) {
-  const [email, setEmail] = useState('');
+  const { setEmail } = useUser();  
+
+  const [email, setEmailInput] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -35,8 +38,9 @@ export default function Login({ onNavigateToSignUp, onLoginSuccess, onForgotPass
       const data = await response.json();
 
       if (response.ok && data.success) {
+          setEmail(email); 
         if (onLoginSuccess) {
-          onLoginSuccess(email);
+          return;
         }
       } else {
         Alert.alert('Error', data.message || 'Invalid credentials');
@@ -63,7 +67,7 @@ export default function Login({ onNavigateToSignUp, onLoginSuccess, onForgotPass
           style={styles.input}
           placeholder="Email Address"
           value={email}
-          onChangeText={setEmail}
+          onChangeText={setEmailInput}
           keyboardType="email-address"
           autoCapitalize="none"
           autoComplete="email"

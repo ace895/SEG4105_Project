@@ -1,9 +1,10 @@
 import os
 import secrets
 from pathlib import Path
+import uuid
 from dotenv import load_dotenv
 from flask import Flask, redirect, request, jsonify, send_from_directory, session, url_for
-from flask_cors import CORS
+from flask_cors import CORS, cross_origin
 from authlib.integrations.flask_client import OAuth
 
 from app.db.meal_db import add_meal, edit_meal, get_meal_history, get_meals
@@ -12,10 +13,20 @@ from app.db.user_db import edit_dietary_info, edit_goal, get_profile, signup, to
 from .utils.process_meal import process_image
 from .utils.utils import login, authenticate, get_recommendations, get_status
 
+import tempfile
+import os
+from uuid import uuid4
+
 load_dotenv()
 
 app = Flask(__name__)
 CORS(app)
+CORS(app, resources={
+    r"/*": {
+        "origins": ["http://localhost:8081", "http://127.0.0.1:8081",],
+        "supports_credentials": True
+    }
+})
 app.secret_key = os.environ.get("SECRET_KEY", secrets.token_hex(32))
 
 #Initialize oauth providers (Google and Microsoft)
@@ -331,11 +342,39 @@ def process_user_meal_image():
                 "Broccoli": {"calorie": 55, "protein": 4, "fat": 0.5, "carb": 11, "weight": 10}
             }
     """
-    image = request.files.get("image")
-    image_bytes = image.read()
+    if "image" not in request.files:
+        print("[ERROR] No 'image' uploaded")
+        return jsonify({"error": "No image uploaded"}), 400
 
-    ingredients = process_image(image_bytes)
-    return jsonify(ingredients), 200
+    image = request.files["image"]
+
+
+    import tempfile
+    import uuid
+    temp_filename = f"{uuid.uuid4()}.jpg"
+    temp_path = os.path.join(tempfile.gettempdir(), temp_filename)
+
+    print(f"[process-meal-image] Saving temp file to: {temp_path}")
+
+
+    image.save(temp_path)
+
+    try:
+        ingredients = process_image(temp_path)
+
+        print("[process-meal-image] Returning results:", ingredients)
+
+        return jsonify(ingredients), 200
+
+    except Exception as e:
+        print("[process-meal-image] ERROR:", e)
+        return jsonify({"error": str(e)}), 500
+
+    finally:
+        if os.path.exists(temp_path):
+            os.remove(temp_path)
+            print("[process-meal-image] Temp file deleted")
+
 
 @app.route("/add-meal", methods=["POST"])
 def add_user_meal():

@@ -9,39 +9,50 @@ export default function ReviewMealLoader() {
 
   useEffect(() => {
     const sendImage = async () => {
-      const baseUrl = getServerUrl();
-      const formData = new FormData();
+      try {
+        const baseUrl = getServerUrl();
+        const formData = new FormData();
 
-      formData.append("image", {
-        uri: imageUri,
-        name: "meal.jpg",
-        type: "image/jpeg",
-      } as any);
+        formData.append("image", {
+          uri: imageUri,
+          name: "meal.jpg",
+          type: "image/jpeg",
+        } as any);
 
-      const res = await fetch(`${baseUrl}/process-meal-image`, {
-        method: "POST",
-        body: formData,
-        headers: {
-          "Content-Type": "multipart/form-data",
-        },
-      });
+        const res = await fetch(`${baseUrl}/process-meal-image`, {
+          method: "POST",
+          body: formData,       
+          headers: {
+            "Content-Type": "multipart/form-data",
+          },
+        });
 
-      const data = await res.json();
+        if (!res.ok) {
+          console.error("Upload failed", await res.text());
+          return;
+        }
 
-      // Format backend response into ingredient array
-      const ingredients = Object.entries(data).map(([name, info]: any) => ({
-        name,
-        calories: info.calorie,
-        weight: info.weight,
-        proteins: info.protein,
-        fats: info.fat,
-        carbs: info.carb,
-      }));
+        const data = await res.json();
 
-      router.push({
-        pathname: "/reviewconfirmmeal",
-        params: { imageUri, ingredients: JSON.stringify(ingredients) },
-      });
+        const ingredients = Object.entries(data).map(([name, info]: any) => ({
+          name,
+          calories: info.calorie,
+          weight: info.weight,
+          proteins: info.protein,
+          fats: info.fat,
+          carbs: info.carb,
+        }));
+
+        router.push({
+          pathname: "/reviewconfirmmeal",
+          params: {
+            imageUri,
+            ingredients: JSON.stringify(ingredients),
+          },
+        });
+      } catch (err) {
+        console.error("Error uploading meal image:", err);
+      }
     };
 
     sendImage();
