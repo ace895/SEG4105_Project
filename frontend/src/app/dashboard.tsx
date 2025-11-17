@@ -164,9 +164,9 @@ const fetchDailyData = async (week: string, date: number): Promise<DailyData> =>
 
 export default function Dashboard() {
   const { email: userEmail } = useUser();
-  const [selectedWeek, setSelectedWeek] = useState('This Week');
-  const [selectedDate, setSelectedDate] = useState(6);
-  const [showWeekPicker, setShowWeekPicker] = useState(false);
+  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
+  const [showCalendar, setShowCalendar] = useState(false);
+  const [showMenu, setShowMenu] = useState(false);
   const [dailyData, setDailyData] = useState<DailyData | null>(null);
   const [loading, setLoading] = useState(true);
   const [showPickerModal, setShowPickerModal] = useState(false);
