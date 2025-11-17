@@ -13,6 +13,10 @@ from app.db.user_db import edit_dietary_info, edit_goal, get_profile, signup, to
 from .utils.process_meal import process_image
 from .utils.utils import login, authenticate, get_recommendations, get_status
 
+import tempfile
+import os
+from uuid import uuid4
+
 load_dotenv()
 
 app = Flask(__name__)
@@ -324,7 +328,6 @@ def get_user_recommendations():
     return jsonify(recommendations), 200
 
 @app.route("/process-meal-image", methods=["POST"])
-@cross_origin()
 def process_user_meal_image():
     """
     Analyzes an uploaded meal image to identify ingredients and nutrition.
@@ -339,15 +342,39 @@ def process_user_meal_image():
                 "Broccoli": {"calorie": 55, "protein": 4, "fat": 0.5, "carb": 11, "weight": 10}
             }
     """
-    image = request.files.get("image")
-    temp_path = f"/tmp/{uuid.uuid4()}.jpg"
+    if "image" not in request.files:
+        print("[ERROR] No 'image' uploaded")
+        return jsonify({"error": "No image uploaded"}), 400
+
+    image = request.files["image"]
+
+
+    import tempfile
+    import uuid
+    temp_filename = f"{uuid.uuid4()}.jpg"
+    temp_path = os.path.join(tempfile.gettempdir(), temp_filename)
+
+    print(f"[process-meal-image] Saving temp file to: {temp_path}")
+
+
     image.save(temp_path)
 
-    ingredients = process_image(temp_path)
+    try:
+        ingredients = process_image(temp_path)
 
-    os.remove(temp_path)
+        print("[process-meal-image] Returning results:", ingredients)
 
-    return jsonify(ingredients), 200
+        return jsonify(ingredients), 200
+
+    except Exception as e:
+        print("[process-meal-image] ERROR:", e)
+        return jsonify({"error": str(e)}), 500
+
+    finally:
+        if os.path.exists(temp_path):
+            os.remove(temp_path)
+            print("[process-meal-image] Temp file deleted")
+
 
 @app.route("/add-meal", methods=["POST"])
 def add_user_meal():

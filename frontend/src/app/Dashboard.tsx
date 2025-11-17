@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from "expo-router";
 import * as ImagePicker from "expo-image-picker";
+import { useUser } from "../context/UserContext";
 
 interface MacroData {
   name: string;
@@ -162,6 +163,7 @@ const fetchDailyData = async (week: string, date: number): Promise<DailyData> =>
 
 
 export default function Dashboard() {
+  const { email: userEmail } = useUser();
   const [selectedWeek, setSelectedWeek] = useState('This Week');
   const [selectedDate, setSelectedDate] = useState(6);
   const [showWeekPicker, setShowWeekPicker] = useState(false);
@@ -344,7 +346,7 @@ export default function Dashboard() {
           <Ionicons name="checkmark-circle" size={24} color="#4ADE80" />
         </View>
 
-        <TouchableOpacity style={styles.recommendationsButton}>
+        <TouchableOpacity style={styles.recommendationsButton} onPress={() => router.push("/recommendations")}>
           <Text style={styles.recommendationsText}>Recipe Recommendations</Text>
         </TouchableOpacity>
           </>

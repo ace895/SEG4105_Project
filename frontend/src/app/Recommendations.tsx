@@ -1,18 +1,21 @@
 import React, { useEffect, useState } from 'react';
-import { View, ScrollView, Text, StyleSheet, ActivityIndicator } from 'react-native';
+import { View, ScrollView, Text, StyleSheet, ActivityIndicator, TouchableOpacity } from 'react-native';
 import { getServerUrl } from '../utils/api';  //IP helper for expo go
 import RecommendationCard, { Recommendation } from '../components/RecommendationCard';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useUser } from '../context/UserContext';
+import { router } from 'expo-router';
 
 export default function RecommendationsPage() {
   const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
   const [loading, setLoading] = useState(true);
+  const { email: userEmail } = useUser();
 
   useEffect(() => {
     const fetchRecommendations = async () => {
       try {
         const baseUrl = getServerUrl();
-        const response = await fetch(`${baseUrl}/get-recommendations?email=test@example.com`); //Need to make email dynamic
+        const response = await fetch(`${baseUrl}/get-recommendations?email=${userEmail}`); 
 
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`);
@@ -33,6 +36,14 @@ export default function RecommendationsPage() {
   return (
     <SafeAreaView style={styles.safeArea}>
     <ScrollView contentContainerStyle={styles.container}>
+      <TouchableOpacity
+                style={styles.backButton}
+                onPress={() => router.push("/dashboard")}
+              >
+                <Text style={styles.backButtonText}>← Back to Dashboard</Text>
+              </TouchableOpacity>
+
+
       <Text style={styles.title}>Recommendations</Text>
 
       {loading ? (
@@ -72,5 +83,13 @@ const styles = StyleSheet.create({
    safeArea: {
     flex: 1,
     backgroundColor: '#f9f9f9',
-  }
+  },
+  backButton: {
+    marginBottom: 15,
+  },
+  backButtonText: {
+    color: "#3B82F6",
+    fontSize: 16,
+    fontWeight: "600",
+  },
 });

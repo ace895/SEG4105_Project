@@ -9,12 +9,14 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { getServerUrl } from "../utils/api";
+import { router } from "expo-router";
 
 import DietaryFormModal, { DietaryFormData } from "../components/DietaryFormModal";
 import GoalsFormModal from "../components/GoalsFormModal";
 import NameFormModal, { NameFormData } from "../components/NameFormModal";
 import NotificationsModal from "../components/NotificationModal";
 import DeleteDataModal from "../components/DeleteDataModal";
+import { useUser } from "../context/UserContext";
 
 interface User {
   name?: string;
@@ -30,7 +32,7 @@ interface User {
 }
 
 export default function Profile() {
-  const userEmail = "john.doe@example.com"; // TODO: pull from login or storage
+  const { email: userEmail } = useUser();
 
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
@@ -51,13 +53,12 @@ export default function Profile() {
         if (!res.ok) throw new Error("Failed to load profile");
 
         const data = await res.json();
-        // Convert backend structure if needed
         setUser({
           ...data,
           email: userEmail,
           allergies: typeof data.allergies === "string"
-            ? data.allergies.split(",").map((a: string) => a.trim()) // convert to array
-            : data.allergies ?? [], // ensure array
+            ? data.allergies.split(",").map((a: string) => a.trim())
+            : data.allergies ?? [],
         });
       } catch (err) {
         console.error("Profile fetch error:", err);
@@ -82,31 +83,21 @@ export default function Profile() {
   const allergyList = user.allergies?.join(", ") || "None";
 
   const handleSaveNotif = async (enabled: boolean) => {
-  try {
-    const baseUrl = getServerUrl();
+    try {
+      const baseUrl = getServerUrl();
 
-    await fetch(`${baseUrl}/toggle-notifications`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        email: userEmail,
-        enabled, // send new setting
-      }),
-    });
+      await fetch(`${baseUrl}/toggle-notifications`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: userEmail, enabled }),
+      });
 
-    // Update UI state after backend success
-    setUser(prev => ({
-      ...prev!,
-      notifications_on: enabled,
-    }));
+      setUser(prev => ({ ...prev!, notifications_on: enabled }));
+    } catch (err) {
+      console.error("Failed to update notifications:", err);
+    }
+  };
 
-  } catch (err) {
-    console.error("Failed to update notifications:", err);
-  }
-};
-
-
-  // ---------------------- UPDATE HANDLERS ----------------------
   const handleSaveDietary = (updated: DietaryFormData) => {
     setUser(prev => ({
       ...prev!,
@@ -115,47 +106,41 @@ export default function Profile() {
     }));
   };
 
-  const handleSaveName = (updated: NameFormData) => {
-    setUser(prev => ({
-      ...prev!,
-      ...updated,
-    }));
-  };
+  const handleSaveName = (updated: NameFormData) =>
+    setUser(prev => ({ ...prev!, ...updated }));
 
   const handleSaveGoal = async (goal: string) => {
-  try {
-    const baseUrl = getServerUrl();
+    try {
+      const baseUrl = getServerUrl();
 
-    await fetch(`${baseUrl}/edit-goal`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        email: userEmail,
-        goal,
-      }),
-    });
+      await fetch(`${baseUrl}/edit-goal`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: userEmail, goal }),
+      });
 
-    // Update local UI version
-    setUser(prev => ({
-      ...prev!,
-      goal,
-    }));
-
-  } catch (err) {
-    console.error("Failed to update goal:", err);
-  }
-};
-
+      setUser(prev => ({ ...prev!, goal }));
+    } catch (err) {
+      console.error("Failed to update goal:", err);
+    }
+  };
 
   const handleConfirmDelete = () => {
     console.log("Deleting user data…");
     setDeleteModalVisible(false);
   };
 
-  // ---------------------- UI ----------------------
   return (
     <SafeAreaView style={styles.safeArea}>
       <ScrollView contentContainerStyle={styles.container}>
+
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={() => router.push("/dashboard")}
+        >
+          <Text style={styles.backButtonText}>← Back to Dashboard</Text>
+        </TouchableOpacity>
+        {/* ---------------- */}
 
         {/* USER INFO */}
         <View style={styles.section}>
@@ -253,80 +238,85 @@ export default function Profile() {
   );
 }
 
-
-
 const styles = StyleSheet.create({
   safeArea: {
-  flex: 1,
-  backgroundColor: '#f9f9f9',
-},
+    flex: 1,
+    backgroundColor: "#f9f9f9",
+  },
   container: {
     flexGrow: 1,
     padding: 20,
-    backgroundColor: '#f9f9f9',
-    justifyContent: 'flex-start',
+    backgroundColor: "#f9f9f9",
+  },
+  backButton: {
+    marginBottom: 15,
+  },
+  backButtonText: {
+    color: "#3B82F6",
+    fontSize: 16,
+    fontWeight: "600",
   },
   section: {
-    backgroundColor: '#fff',
+    backgroundColor: "#fff",
     borderRadius: 10,
     padding: 15,
     marginBottom: 15,
-    shadowColor: '#000',
+    shadowColor: "#000",
     shadowOpacity: 0.05,
     shadowOffset: { width: 0, height: 1 },
     shadowRadius: 3,
   },
   sectionTitle: {
     fontSize: 18,
-    fontWeight: '600',
+    fontWeight: "600",
     marginBottom: 10,
   },
   userRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
   },
   userName: {
     fontSize: 18,
-    fontWeight: '600',
+    fontWeight: "600",
   },
   userEmail: {
-    color: '#777',
+    color: "#777",
   },
   editButton: {
-    backgroundColor: '#333',
+    backgroundColor: "#333",
     borderRadius: 8,
     paddingVertical: 6,
     paddingHorizontal: 15,
   },
   editText: {
-    color: '#fff',
-    fontWeight: '500',
+    color: "#fff",
+    fontWeight: "500",
   },
   infoText: {
-    color: '#555',
+    color: "#555",
     marginBottom: 5,
   },
   actionButton: {
-    backgroundColor: '#333',
+    backgroundColor: "#333",
     borderRadius: 8,
     paddingVertical: 10,
-    alignItems: 'center',
+    alignItems: "center",
     marginTop: 10,
   },
   buttonText: {
-    color: '#fff',
-    fontWeight: '500',
+    color: "#fff",
+    fontWeight: "500",
   },
   linkRow: {
     marginTop: 10,
   },
   linkText: {
     fontSize: 16,
-    fontWeight: '500',
+    fontWeight: "500",
   },
   subText: {
-    color: '#888',
+    color: "#888",
     fontSize: 13,
   },
 });
