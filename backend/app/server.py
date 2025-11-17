@@ -1,9 +1,10 @@
 import os
 import secrets
 from pathlib import Path
+import uuid
 from dotenv import load_dotenv
 from flask import Flask, redirect, request, jsonify, send_from_directory, session, url_for
-from flask_cors import CORS
+from flask_cors import CORS, cross_origin
 from authlib.integrations.flask_client import OAuth
 
 from app.db.meal_db import add_meal, edit_meal, get_meal_history, get_meals
@@ -16,6 +17,12 @@ load_dotenv()
 
 app = Flask(__name__)
 CORS(app)
+CORS(app, resources={
+    r"/*": {
+        "origins": ["http://localhost:8081", "http://127.0.0.1:8081",],
+        "supports_credentials": True
+    }
+})
 app.secret_key = os.environ.get("SECRET_KEY", secrets.token_hex(32))
 
 #Initialize oauth providers (Google and Microsoft)
@@ -317,6 +324,7 @@ def get_user_recommendations():
     return jsonify(recommendations), 200
 
 @app.route("/process-meal-image", methods=["POST"])
+@cross_origin()
 def process_user_meal_image():
     """
     Analyzes an uploaded meal image to identify ingredients and nutrition.
@@ -332,9 +340,13 @@ def process_user_meal_image():
             }
     """
     image = request.files.get("image")
-    image_bytes = image.read()
+    temp_path = f"/tmp/{uuid.uuid4()}.jpg"
+    image.save(temp_path)
 
-    ingredients = process_image(image_bytes)
+    ingredients = process_image(temp_path)
+
+    os.remove(temp_path)
+
     return jsonify(ingredients), 200
 
 @app.route("/add-meal", methods=["POST"])
