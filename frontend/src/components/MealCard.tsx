@@ -1,9 +1,10 @@
 //Need to make cards touchable and send info to meal page to open up
 import React from 'react';
-import { View, Text, StyleSheet, Image } from 'react-native';
-
+import { View, Text, StyleSheet, Image, TouchableOpacity } from 'react-native';
+import { useRouter } from 'expo-router';
 
 export interface Meal {
+  id: string;   // <-- REQUIRED for navigation
   name: string;
   calories: number;
   weight: number;
@@ -12,6 +13,7 @@ export interface Meal {
   carbs: number;
   time: string;
   imageUri?: string;
+  ingredients?: any; // backend ingredient object
 }
 
 interface MealCardProps {
@@ -19,9 +21,23 @@ interface MealCardProps {
 }
 
 export default function MealCard({ meal }: MealCardProps) {
+  const router = useRouter();
+
   return (
-    <View style={styles.card}>
-      {/* Left side: Image and text */}
+    <TouchableOpacity
+      style={styles.card}
+      onPress={() =>
+        router.push({
+          pathname: `/meal/${meal.id}`,
+          params: {
+            ingredients: JSON.stringify(meal.ingredients || {}),
+            imageUri: meal.imageUri || "",
+            name: meal.name
+          },
+        })
+      }
+    >
+      {/* Left side */}
       <View style={styles.leftSection}>
         {meal.imageUri ? (
           <Image source={{ uri: meal.imageUri }} style={styles.image} />
@@ -45,7 +61,7 @@ export default function MealCard({ meal }: MealCardProps) {
         </View>
       </View>
 
-      {/* Right side: Macronutrients */}
+      {/* Right side */}
       <View style={styles.rightSection}>
         <Text style={styles.macroText}>
           <Text style={styles.bold}>{meal.proteins}g proteins</Text>
@@ -57,7 +73,7 @@ export default function MealCard({ meal }: MealCardProps) {
           <Text style={styles.bold}>{meal.carbs}g carbs</Text>
         </Text>
       </View>
-    </View>
+    </TouchableOpacity>
   );
 }
 

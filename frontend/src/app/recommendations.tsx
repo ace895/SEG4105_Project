@@ -40,7 +40,7 @@ export default function RecommendationsPage() {
                 style={styles.backButton}
                 onPress={() => router.push("/dashboard")}
               >
-                <Text style={styles.backButtonText}>← Back to Dashboard</Text>
+                <Text style={styles.backButtonText}>Back to Dashboard</Text>
               </TouchableOpacity>
 
 

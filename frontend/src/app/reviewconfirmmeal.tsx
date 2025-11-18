@@ -6,149 +6,215 @@ import {
   StyleSheet,
   Image,
   TouchableOpacity,
+  Modal,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { useLocalSearchParams } from "expo-router";
-
+import { useLocalSearchParams, router } from "expo-router";
 import IngredientCard, { Ingredient } from "../components/IngredientCard";
 import IngredientEditModal from "../components/EditIngredientModal";
 import AddIngredientModal from "../components/AddIngredientModal";
 import { useUser } from "../context/UserContext";
 import { getServerUrl } from "../utils/api";
-import { router } from "expo-router";
+import * as ImagePicker from "expo-image-picker";
+import { Platform } from "react-native";
+import { ActivityIndicator } from "react-native";
 
-
-export default function ReviewMealPage() {
+export default function ReviewConfirmMeal() {
   const { email: userEmail } = useUser();
+  const [loading, setLoading] = useState(false);
 
   const { imageUri, ingredients: ingredientString } = useLocalSearchParams();
 
-  // Parse ingredient JSON from navigation
+  // Parse ingredient JSON coming from ReviewMealLoader
   let parsedIngredients: Ingredient[] = [];
   try {
     if (ingredientString && typeof ingredientString === "string") {
       parsedIngredients = JSON.parse(ingredientString);
     }
-  } catch (e) {
-    console.warn("Failed to parse ingredients:", e);
-    parsedIngredients = [];
-  }
-
+  } catch {}
 
   const [ingredients, setIngredients] = useState<Ingredient[]>(parsedIngredients);
-  const [liked, setLiked] = useState<"up" | "down" | null>(null);
+  const [currentImage, setCurrentImage] = useState(imageUri as string);
   const [editingIngredient, setEditingIngredient] = useState<Ingredient | null>(null);
   const [editVisible, setEditVisible] = useState(false);
   const [addVisible, setAddVisible] = useState(false);
 
-  const safe = (arr: Ingredient[]) => (Array.isArray(arr) ? arr : []);
+  // "retake" | "add" | null
+  const [pickerMode, setPickerMode] = useState<"retake" | "add" | null>(null);
 
-  // TOTALS 
+  // ---- PROCESS IMAGE THROUGH BACKEND AGAIN ----
+  const processNewImage = async (uri: string) => {
+    const baseUrl = getServerUrl();
+    const formData = new FormData();
+
+    let fileToUpload: any;
+
+    if (Platform.OS === "web") {
+      const blob = await fetch(uri).then((r) => r.blob());
+      fileToUpload = new File([blob], "meal.jpg", { type: blob.type });
+    } else {
+      fileToUpload = {
+        uri,
+        name: "meal.jpg",
+        type: "image/jpeg",
+      };
+    }
+
+    formData.append("image", fileToUpload);
+
+    const res = await fetch(`${baseUrl}/process-meal-image`, {
+      method: "POST",
+      body: formData,
+    });
+
+    if (!res.ok) {
+      console.error("Upload failed", await res.text());
+      return null;
+    }
+
+    const data = await res.json();
+
+    const newIngredients = Object.entries(data).map(([name, info]: any) => ({
+      name,
+      calories: info.calorie,
+      weight: info.weight,
+      proteins: info.protein,
+      fats: info.fat,
+      carbs: info.carb,
+    }));
+
+    return newIngredients;
+  };
+
+  // ---- HANDLE RETAKE OR ADD PHOTO ACTION ----
+  const handleImage = async (uri: string) => {
+    setLoading(true); 
+    const newIngs = await processNewImage(uri);
+    setLoading(false);
+    if (!newIngs) return;
+
+    if (pickerMode === "retake") {
+      // Replace everything
+      setCurrentImage(uri);
+      setIngredients(newIngs);
+    } else if (pickerMode === "add") {
+      // Append ingredients
+      setIngredients((prev) => [...prev, ...newIngs]);
+    }
+
+    setPickerMode(null);
+  };
+
+  // ---- CAMERA ----
+  const openCamera = async () => {
+    const permission = await ImagePicker.requestCameraPermissionsAsync();
+    if (permission.status !== "granted") {
+      alert("Camera permission required.");
+      return;
+    }
+
+    const result = await ImagePicker.launchCameraAsync({
+      allowsEditing: true,
+      quality: 0.7,
+    });
+
+    if (!result.canceled) {
+      handleImage(result.assets[0].uri);
+    }
+  };
+
+  // ---- GALLERY ----
+  const openGallery = async () => {
+    const result = await ImagePicker.launchImageLibraryAsync({
+      allowsEditing: true,
+      quality: 0.7,
+    });
+
+    if (!result.canceled) {
+      handleImage(result.assets[0].uri);
+    }
+  };
+
+  // ---- FINISH MEAL ----
+  const handleDone = async () => {
+    if (!userEmail) {
+      alert("Login required.");
+      return;
+    }
+
+    const ingredientObject: any = {};
+    ingredients.forEach((i) => {
+      ingredientObject[i.name] = {
+        calorie: i.calories,
+        protein: i.proteins,
+        fat: i.fats,
+        carb: i.carbs,
+        weight: i.weight,
+      };
+    });
+
+    const payload = {
+      email: userEmail,
+      time: new Date().toISOString(),
+      ingredients: ingredientObject,
+      edited: false,
+      before_edit: {},
+      after_edit: ingredientObject,
+    };
+
+    try {
+      const res = await fetch(`${getServerUrl()}/add-meal`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await res.json();
+
+      if (res.ok && data.success) {
+        alert("Meal saved!");
+        router.push("/dashboard");
+      } else {
+        alert("Failed to save meal.");
+      }
+    } catch (err) {
+      alert("Network error.");
+    }
+  };
+
+  // TOTALS
+  const safe = (arr: Ingredient[]) => (Array.isArray(arr) ? arr : []);
   const totalCalories = safe(ingredients).reduce((s, i) => s + (i.calories || 0), 0);
   const totalWeight = safe(ingredients).reduce((s, i) => s + (i.weight || 0), 0);
   const totalProteins = safe(ingredients).reduce((s, i) => s + (i.proteins || 0), 0);
   const totalFats = safe(ingredients).reduce((s, i) => s + (i.fats || 0), 0);
   const totalCarbs = safe(ingredients).reduce((s, i) => s + (i.carbs || 0), 0);
 
-
-  const openEdit = (ingredient: Ingredient) => {
-    setEditingIngredient(ingredient);
-    setEditVisible(true);
-  };
-
-  const saveIngredient = (updated: Ingredient) => {
-    setIngredients((prev) =>
-      prev.map((i) => (i.name === editingIngredient?.name ? updated : i))
-    );
-  };
-
-  const addIngredient = (ing: Ingredient) => {
-    setIngredients((prev) => [...prev, ing]);
-  };
-
-  const handleDone = async () => {
-  if (!userEmail) {
-    alert("No user email found — please log in again.");
-    return;
-  }
-
-  // Convert ingredient array → backend expected object
-  const ingredientObject: any = {};
-  ingredients.forEach((i) => {
-    ingredientObject[i.name] = {
-      calorie: i.calories,
-      protein: i.proteins,
-      fat: i.fats,
-      carb: i.carbs,
-      weight: i.weight,
-    };
-  });
-
-  const payload = {
-    email: userEmail,
-    time: new Date().toISOString(),
-    ingredients: ingredientObject,
-    edited: false,        // or replace with your logic
-    before_edit: {},
-    after_edit: ingredientObject,
-  };
-
-  try {
-    const res = await fetch(`${getServerUrl()}/add-meal`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(payload),
-    });
-
-    const data = await res.json();
-    console.log("Add meal response:", data);
-
-    if (res.ok && data.success) {
-      alert("Meal saved successfully!");
-      router.push("/dashboard");
-    } else {
-      alert("Failed to save meal.");
-    }
-  } catch (err) {
-    console.error("Error saving meal:", err);
-    alert("Network error — could not save meal.");
-  }
-};
-
+  if (loading) {
+  return (
+    <View style={styles.loadingScreen}>
+      <ActivityIndicator size="large" color="#4A90E2" />
+      <Text style={{ marginTop: 12, fontSize: 16 }}>Processing image...</Text>
+    </View>
+  );
+}
 
   return (
+
+    
     <ScrollView contentContainerStyle={styles.container}>
+      
       {/* HEADER */}
       <View style={styles.headerRow}>
         <TouchableOpacity onPress={() => router.push("/dashboard")}>
           <Ionicons name="arrow-back" size={28} color="#333" />
         </TouchableOpacity>
-
-        <View style={styles.thumbsRow}>
-          <TouchableOpacity onPress={() => setLiked("up")}>
-            <Ionicons
-              name="thumbs-up"
-              size={28}
-              color={liked === "up" ? "#27ae60" : "#888"}
-            />
-          </TouchableOpacity>
-
-          <TouchableOpacity onPress={() => setLiked("down")} style={{ marginLeft: 18 }}>
-            <Ionicons
-              name="thumbs-down"
-              size={28}
-              color={liked === "down" ? "#c0392b" : "#888"}
-            />
-          </TouchableOpacity>
-        </View>
       </View>
 
       {/* IMAGE */}
       <View style={styles.imageWrapper}>
-        {imageUri ? (
-          <Image source={{ uri: imageUri as string }} style={styles.image} />
+        {currentImage ? (
+          <Image source={{ uri: currentImage }} style={styles.image} />
         ) : (
           <View style={[styles.image, styles.placeholder]}>
             <Text>No Image</Text>
@@ -156,16 +222,19 @@ export default function ReviewMealPage() {
         )}
       </View>
 
-      {/* INGREDIENT CARDS */}
-      <View style={{ marginTop: 10 }}>
-        {ingredients.map((ing, index) => (
-          <IngredientCard
-            key={index}
-            ingredient={ing}
-            onEdit={() => openEdit(ing)}
-          />
-        ))}
-      </View>
+      {/* INGREDIENT LIST */}
+      {ingredients.map((ing, index) => (
+        <IngredientCard
+          key={index}
+          ingredient={ing}
+          onEdit={() => {
+            setEditingIngredient(ing);
+            setEditVisible(true);
+          }}
+        />
+      ))}
+
+      
 
       {/* TOTALS */}
       <View style={styles.summaryRow}>
@@ -209,24 +278,55 @@ export default function ReviewMealPage() {
         </View>
       </View>
 
-      {/* BUTTON ROW */}
+      {/* ACTION BUTTONS */}
       <View style={styles.bottomRow}>
-        <TouchableOpacity style={styles.bottomButton}>
+        <TouchableOpacity
+          style={styles.bottomButton}
+          onPress={() => setPickerMode("retake")}
+        >
           <Ionicons name="camera-reverse" size={30} color="#27ae60" />
-          <Text style={styles.bottomLabel}>Retake Photo</Text>
+          <Text>Retake Photo</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.bottomButton}>
+        <TouchableOpacity
+          style={styles.bottomButton}
+          onPress={() => setPickerMode("add")}
+        >
           <Ionicons name="camera" size={30} color="#2980b9" />
-          <Text style={styles.bottomLabel}>Add Photo</Text>
+          <Text>Add Photo</Text>
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.bottomButton} onPress={handleDone}>
           <Ionicons name="checkmark-circle" size={30} color="#e67e22" />
-          <Text style={styles.bottomLabel}>Done</Text>
+          <Text>Done</Text>
         </TouchableOpacity>
-
       </View>
+
+      {/* IMAGE PICKER MODAL */}
+      <Modal visible={pickerMode !== null} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalBox}>
+            <Text style={styles.modalTitle}>
+              {pickerMode === "retake" ? "Retake Meal Photo" : "Add Meal Photo"}
+            </Text>
+
+            <TouchableOpacity style={styles.modalBtn} onPress={openCamera}>
+              <Text style={styles.modalText}>Take Photo</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.modalBtn} onPress={openGallery}>
+              <Text style={styles.modalText}>Choose From Gallery</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.modalBtn, { backgroundColor: "#eee" }]}
+              onPress={() => setPickerMode(null)}
+            >
+              <Text style={{ color: "red" }}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
 
       {/* MODALS */}
       {editingIngredient && (
@@ -234,61 +334,78 @@ export default function ReviewMealPage() {
           visible={editVisible}
           ingredient={editingIngredient}
           onClose={() => setEditVisible(false)}
-          onSave={saveIngredient}
+          onSave={(updated) =>
+            setIngredients((prev) =>
+              prev.map((i) => (i.name === editingIngredient.name ? updated : i))
+            )
+          }
         />
       )}
 
       <AddIngredientModal
         visible={addVisible}
         onClose={() => setAddVisible(false)}
-        onSave={addIngredient}
+        onSave={(ing) => setIngredients((prev) => [...prev, ing])}
       />
     </ScrollView>
   );
 }
 
-
 const styles = StyleSheet.create({
-  container: {
-    padding: 20,
-    backgroundColor: "#F7F7F7",
-  },
-  headerRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 10,
-    marginTop: 20,
-  },
-  thumbsRow: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  imageWrapper: {
-    alignItems: "center",
-  },
-  image: {
-    width: "80%",
-    height: 180,
-    borderRadius: 12,
-  },
+  container: { padding: 20 },
+  headerRow: { flexDirection: "row", marginBottom: 20 },
+  imageWrapper: { alignItems: "center" },
+  image: { width: "80%", height: 180, borderRadius: 10 },
   placeholder: {
     backgroundColor: "#ddd",
     justifyContent: "center",
     alignItems: "center",
   },
-  summaryRow: {
+  summary: { marginTop: 20 },
+  summaryTitle: { fontSize: 18, fontWeight: "700", marginBottom: 10 },
+  bottomRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginTop: 30,
+  },
+  bottomButton: { alignItems: "center" },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  modalBox: {
+    width: 280,
+    backgroundColor: "#fff",
+    padding: 20,
+    borderRadius: 12,
+    alignItems: "center",
+  },
+  modalTitle: { fontSize: 18, fontWeight: "700", marginBottom: 10 },
+  modalBtn: {
+    width: "100%",
+    backgroundColor: "#f5f5f5",
+    padding: 12,
+    borderRadius: 10,
+    marginVertical: 5,
+    alignItems: "center",
+  },
+  modalText: { fontSize: 16 },
+  loadingScreen: {
+  flex: 1,
+  justifyContent: "center",
+  alignItems: "center",
+  backgroundColor: "white",
+  paddingTop: 80,
+},
+summaryRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     marginTop: 20,
   },
   summaryColumn: {
     width: "48%",
-  },
-  summaryTitle: {
-    fontSize: 18,
-    fontWeight: "700",
-    marginBottom: 10,
   },
   greenBadgeLarge: {
     backgroundColor: "#d9f8e3",
@@ -329,20 +446,5 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     marginBottom: 5,
-  },
-  bottomRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginTop: 30,
-    marginBottom: 20,
-  },
-  bottomButton: {
-    alignItems: "center",
-    width: "30%",
-  },
-  bottomLabel: {
-    marginTop: 6,
-    color: "#444",
-    fontSize: 13,
   },
 });

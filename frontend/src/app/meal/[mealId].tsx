@@ -1,128 +1,99 @@
-import React, { useState } from 'react';
-import { View, ScrollView, StyleSheet, Image, Text } from 'react-native';
-import IngredientCard, { Ingredient } from '../../components/IngredientCard';
-import IngredientEditModal from '../../components/EditIngredientModal';
+import { View, ScrollView, StyleSheet, Text, Image, TouchableOpacity } from "react-native";
+import { useLocalSearchParams } from "expo-router";
+import IngredientCard, { Ingredient } from "../../components/IngredientCard";
+import { router } from "expo-router";
 
-interface MealDetailsProps {
-  ingredients: Ingredient[];
-  imageUri?: string;
-}
 
-export default function MealDetails({ ingredients, imageUri }: MealDetailsProps) {
-  const [ingredientList, setIngredientList] = useState<Ingredient[]>(ingredients);
+export default function MealDetailsPage() {
+  const { ingredients, imageUri, name, date } = useLocalSearchParams();
 
-  const [editVisible, setEditVisible] = useState(false);
-  const [editingIndex, setEditingIndex] = useState<number | null>(null);
-  const [editingIngredient, setEditingIngredient] = useState<Ingredient | null>(null);
+  const imgUri = Array.isArray(imageUri) ? imageUri[0] : imageUri;
 
-  // Dynamic totals based on current ingredientList
-  const totalCalories = ingredientList.reduce((sum, item) => sum + item.calories, 0);
-  const totalWeight = ingredientList.reduce((sum, item) => sum + item.weight, 0);
-  const totalProteins = ingredientList.reduce((sum, item) => sum + item.proteins, 0);
-  const totalFats = ingredientList.reduce((sum, item) => sum + item.fats, 0);
-  const totalCarbs = ingredientList.reduce((sum, item) => sum + item.carbs, 0);
+  let ingredientList: Ingredient[] = [];
+  try {
+    if (typeof ingredients === "string") {
+      ingredientList = JSON.parse(ingredients);
+    }
+  } catch {}
+
+  // Totals
+  const totalCalories = ingredientList.reduce((s, i) => s + i.calories, 0);
+  const totalWeight = ingredientList.reduce((s, i) => s + i.weight, 0);
+  const totalProteins = ingredientList.reduce((s, i) => s + i.proteins, 0);
+  const totalFats = ingredientList.reduce((s, i) => s + i.fats, 0);
+  const totalCarbs = ingredientList.reduce((s, i) => s + i.carbs, 0);
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
-      {/* Image */}
-      {imageUri ? (
-        <Image source={{ uri: imageUri }} style={styles.image} />
+    <ScrollView contentContainerStyle={styles.container}>      
+          <TouchableOpacity
+      style={styles.backButton}
+      onPress={() =>
+        router.push({pathname: "/dashboard",
+        })
+      }
+    >
+      <Text style={styles.backButtonText}>Back to Dashboard</Text>
+    </TouchableOpacity>
+
+
+      {imgUri ? (
+        <Image source={{ uri: imgUri }} style={styles.image} />
       ) : (
         <View style={[styles.image, styles.placeholder]}>
-          <Text style={styles.placeholderText}>No image available</Text>
+          <Text>No Image</Text>
         </View>
       )}
 
-      {/* Ingredient Cards */}
+      <Text style={styles.title}>{name}</Text>
+
       {ingredientList.map((item, index) => (
-        <IngredientCard
-          key={index}
-          ingredient={item}
-          onEdit={() => {
-            setEditingIngredient(item);
-            setEditingIndex(index);
-            setEditVisible(true);
-          }}
-        />
+        <IngredientCard key={index} ingredient={item} onEdit={() => {}} />
       ))}
 
-      {/* Edit Ingredient Modal */}
-      {editingIngredient && (
-        <IngredientEditModal
-          visible={editVisible}
-          ingredient={editingIngredient}
-          onClose={() => setEditVisible(false)}
-          onSave={(updated) => {
-            if (editingIndex !== null) {
-              const updatedList = [...ingredientList];
-              updatedList[editingIndex] = {
-                ...updated,
-                calories: Number(updated.calories),
-                weight: Number(updated.weight),
-                proteins: Number(updated.proteins),
-                fats: Number(updated.fats),
-                carbs: Number(updated.carbs),
-              };
-              setIngredientList(updatedList);
-            }
-            setEditVisible(false);
-          }}
-        />
-      )}
-
-      {/* Totals */}
       <View style={styles.summary}>
-        <View>
-          <Text style={styles.summaryTitle}>Totals</Text>
-          <Text style={styles.text}>{totalCalories} calories</Text>
-          <Text style={styles.text}>{totalWeight} grams</Text>
-        </View>
-
-        <View>
-          <Text style={styles.summaryTitle}>Macro-nutrients</Text>
-          <Text style={styles.text}>{totalProteins}g proteins</Text>
-          <Text style={styles.text}>{totalFats}g fats</Text>
-          <Text style={styles.text}>{totalCarbs}g carbs</Text>
-        </View>
+        <Text style={styles.summaryTitle}>Totals</Text>
+        <Text>{totalCalories} calories</Text>
+        <Text>{totalWeight} grams</Text>
+        <Text>{totalProteins}g proteins</Text>
+        <Text>{totalFats}g fats</Text>
+        <Text>{totalCarbs}g carbs</Text>
       </View>
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    padding: 20,
-    backgroundColor: '#f9f9f9',
-  },
+  container: { padding: 20 },
   image: {
-    width: '100%',
+    width: "100%",
     height: 180,
     borderRadius: 12,
     marginBottom: 15,
   },
-  placeholder: {
-    backgroundColor: '#eee',
-    justifyContent: 'center',
-    alignItems: 'center',
+  title: {
+    fontSize: 22,
+    fontWeight: "700",
+    marginBottom: 10,
   },
-  placeholderText: {
-    color: '#777',
-    fontStyle: 'italic',
+  placeholder: {
+    backgroundColor: "#eee",
+    justifyContent: "center",
+    alignItems: "center",
   },
   summary: {
-    backgroundColor: '#fff',
-    borderRadius: 10,
+    backgroundColor: "#fff",
     padding: 15,
-    marginTop: 15,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+    borderRadius: 10,
+    marginTop: 20,
   },
-  summaryTitle: {
-    fontWeight: '700',
+  summaryTitle: { fontSize: 18, fontWeight: "700", marginBottom: 8 },
+
+   backButton: {
+    marginBottom: 15,
+  },
+  backButtonText: {
+    color: "#3B82F6",
     fontSize: 16,
-    marginBottom: 6,
-  },
-  text: {
-    color: '#333',
+    fontWeight: "600",
   },
 });

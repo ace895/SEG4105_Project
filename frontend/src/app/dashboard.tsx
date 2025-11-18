@@ -7,6 +7,7 @@ import * as ImagePicker from "expo-image-picker";
 import { Calendar } from 'react-native-calendars';
 import { useUser } from "../context/UserContext";
 
+
 interface MacroData {
   name: string;
   color: string;
@@ -171,6 +172,12 @@ export default function Dashboard() {
   const [dailyData, setDailyData] = useState<DailyData | null>(null);
   const [loading, setLoading] = useState(true);
   const [showPickerModal, setShowPickerModal] = useState(false);
+
+  const formatLocalDateISO = (date: Date) =>
+  new Date(date.getFullYear(), date.getMonth(), date.getDate())
+    .toISOString()
+    .split("T")[0];
+
   
   const formatDate = (date: Date) => {
     const options: Intl.DateTimeFormatOptions = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
@@ -397,7 +404,15 @@ export default function Dashboard() {
             })}
           </View>
 
-          <TouchableOpacity style={styles.reviewMealsButton}>
+            <TouchableOpacity
+            style={styles.reviewMealsButton}
+            onPress={() =>
+              router.push({
+                pathname: "/historical-meals",
+                params: { date: formatLocalDateISO(selectedDate) },
+              })
+            }
+          >
             <Text style={styles.reviewMealsText}>Review Meals</Text>
           </TouchableOpacity>
         </View>
@@ -460,7 +475,7 @@ export default function Dashboard() {
               <Text style={styles.modalText}>Choose from Gallery</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity
+            <TouchableOpacity 
               style={[styles.modalBtn, styles.cancelBtn]}
               onPress={() => setShowPickerModal(false)}
             >

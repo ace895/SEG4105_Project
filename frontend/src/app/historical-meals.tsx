@@ -1,78 +1,103 @@
 import React, { useEffect, useState } from "react";
-import { View, Text, ScrollView, StyleSheet } from "react-native";
+import { View, Text, ScrollView, StyleSheet, TouchableOpacity } from "react-native";
 import MealCard, { Meal } from "../components/MealCard";
+import { useUser } from "../context/UserContext";
+import { getServerUrl } from "../utils/api";
+import { useLocalSearchParams, router } from "expo-router";
+
+function parseLocalDate(dateStr: string) {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  return new Date(y, m - 1, d); // LOCAL date (no timezone shift)
+}
 
 export default function HistoricalMealsPage() {
-  const [meals, setMeals] = useState<Meal[]>([]);
+  const { email: userEmail } = useUser();
+  const { date } = useLocalSearchParams<{ date: string }>();
 
+  const [meals, setMeals] = useState<Meal[]>([]);
   const [totalCalories, setTotalCalories] = useState(0);
   const [totalProtein, setTotalProtein] = useState(0);
   const [totalFat, setTotalFat] = useState(0);
   const [totalCarbs, setTotalCarbs] = useState(0);
 
-  // Mock data (matches the format used by MealCard)
-  const MOCK_DATA: Meal[] = [
-    {
-      name: "Greek Salad",
-      calories: 200,
-      weight: 300,
-      proteins: 10,
-      fats: 20,
-      carbs: 20,
-      time: "08:00 AM",
-      imageUri: "https://via.placeholder.com/100",
-    },
-    {
-      name: "Burger",
-      calories: 400,
-      weight: 200,
-      proteins: 30,
-      fats: 40,
-      carbs: 50,
-      time: "01:30 PM",
-      imageUri: "https://via.placeholder.com/100",
-    },
-    {
-      name: "Fish & Chicken",
-      calories: 700,
-      weight: 320,
-      proteins: 50,
-      fats: 10,
-      carbs: 0,
-      time: "07:45 PM",
-      imageUri: "https://via.placeholder.com/100",
-    },
-  ];
+  const localDateObj = date ? parseLocalDate(date) : new Date();
 
   useEffect(() => {
-    // simulate "fetching" meals — replace later with backend fetch
-    setMeals(MOCK_DATA);
+    if (!userEmail || !date) return;
 
-    // compute totals
-    const totals = MOCK_DATA.reduce(
-      (acc, m) => {
-        acc.calories += m.calories;
-        acc.protein += m.proteins;
-        acc.fat += m.fats;
-        acc.carbs += m.carbs;
-        return acc;
-      },
-      { calories: 0, protein: 0, fat: 0, carbs: 0 }
-    );
+    const fetchMeals = async () => {
+      try {
+        const baseUrl = getServerUrl();
+        const url = `${baseUrl}/get-meals?email=${encodeURIComponent(userEmail)}&date=${date}`;
 
-    setTotalCalories(totals.calories);
-    setTotalProtein(totals.protein);
-    setTotalFat(totals.fat);
-    setTotalCarbs(totals.carbs);
-  }, []);
+        const res = await fetch(url);
+        const data = await res.json();
 
-  const date = "2025-07-07"; // mock date
+        const parsedMeals: Meal[] = [];
+
+        Object.entries(data).forEach(([time, mealData]: any, index) => {
+          const ingredientArray = Object.entries(mealData)
+            .filter(([k]) => k !== "image_filename")
+            .map(([name, info]: any) => ({
+              name,
+              calories: info.calorie,
+              weight: info.weight,
+              proteins: info.protein,
+              fats: info.fat,
+              carbs: info.carb,
+            }));
+
+          parsedMeals.push({
+            id: `${date}-${index}`,
+            name: ingredientArray.map((i) => i.name).join(", "),
+            time,
+            calories: ingredientArray.reduce((a, b) => a + b.calories, 0),
+            weight: ingredientArray.reduce((a, b) => a + b.weight, 0),
+            proteins: ingredientArray.reduce((a, b) => a + b.proteins, 0),
+            fats: ingredientArray.reduce((a, b) => a + b.fats, 0),
+            carbs: ingredientArray.reduce((a, b) => a + b.carbs, 0),
+            ingredients: ingredientArray,
+            imageUri: mealData.image_filename
+              ? `${getServerUrl()}/uploads/${mealData.image_filename}`
+              : "",
+          });
+        });
+
+        setMeals(parsedMeals);
+
+        const totals = parsedMeals.reduce(
+          (acc, m) => ({
+            calories: acc.calories + m.calories,
+            protein: acc.protein + m.proteins,
+            fat: acc.fat + m.fats,
+            carbs: acc.carbs + m.carbs,
+          }),
+          { calories: 0, protein: 0, fat: 0, carbs: 0 }
+        );
+
+        setTotalCalories(totals.calories);
+        setTotalProtein(totals.protein);
+        setTotalFat(totals.fat);
+        setTotalCarbs(totals.carbs);
+      } catch (err) {
+        console.error("Error fetching meals:", err);
+      }
+    };
+
+    fetchMeals();
+  }, [userEmail, date]);
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
-      {/* Date */}
+      <TouchableOpacity
+        style={styles.backButton}
+        onPress={() => router.push("/dashboard")}
+      >
+        <Text style={styles.backButtonText}>Back to Dashboard</Text>
+      </TouchableOpacity>
+
       <Text style={styles.dateText}>
-        {new Date(date).toLocaleDateString("en-US", {
+        {localDateObj.toLocaleDateString("en-US", {
           weekday: "long",
           month: "long",
           day: "numeric",
@@ -80,153 +105,115 @@ export default function HistoricalMealsPage() {
         })}
       </Text>
 
-      {/* Totals */}
-       <Text style={styles.sectionHeader}>You consumed</Text>
+      <Text style={styles.sectionHeader}>You consumed</Text>
 
-<View style={styles.totalsRow}>
-
-  {/* Green Calories Box */}
-  <View style={[styles.totalBox, styles.greenBox]}>
-    <Text style={styles.calorieNumber}>{totalCalories}</Text>
-    <Text style={styles.calorieLabel}>calories</Text>
-  </View>
-
-  {/* Pink Macros Box */}
-    <View style={[styles.totalBox, styles.pinkBox]}>
-        <View style={styles.macrosRow}>
-        <View style={styles.macroItem}>
-            <Text style={styles.macroNumber}>{totalProtein}</Text>
-            <Text style={styles.macroLabel}>grams of protein</Text>
+      <View style={styles.totalsRow}>
+        <View style={[styles.totalBox, styles.greenBox]}>
+          <Text style={styles.calorieNumber}>{totalCalories}</Text>
+          <Text style={styles.calorieLabel}>calories</Text>
         </View>
 
-        <View style={styles.macroItem}>
-            <Text style={styles.macroNumber}>{totalFat}</Text>
-            <Text style={styles.macroLabel}>grams of fats</Text>
+        <View style={[styles.totalBox, styles.pinkBox]}>
+          <View style={styles.macrosRow}>
+            <View style={styles.macroItem}>
+              <Text style={styles.macroNumber}>{totalProtein}</Text>
+              <Text style={styles.macroLabel}>grams protein</Text>
+            </View>
+            <View style={styles.macroItem}>
+              <Text style={styles.macroNumber}>{totalFat}</Text>
+              <Text style={styles.macroLabel}>grams fat</Text>
+            </View>
+            <View style={styles.macroItem}>
+              <Text style={styles.macroNumber}>{totalCarbs}</Text>
+              <Text style={styles.macroLabel}>grams carbs</Text>
+            </View>
+          </View>
         </View>
+      </View>
 
-        <View style={styles.macroItem}>
-            <Text style={styles.macroNumber}>{totalCarbs}</Text>
-            <Text style={styles.macroLabel}>grams of carbs</Text>
-        </View>
-        </View>
-    </View>
-
-    </View>
-
-      {/* Meals list */}
       <Text style={styles.mealsTitle}>Meals</Text>
 
       {meals.map((meal, i) => (
-        <MealCard key={i} meal={meal} />
+        <MealCard key={meal.id} meal={meal} />
       ))}
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    padding: 20,
-  },
+  container: { padding: 20 },
   dateText: {
     fontSize: 22,
     fontWeight: "700",
     textAlign: "center",
     marginBottom: 15,
   },
-  summaryBox: {
-    backgroundColor: "#fff",
+  sectionHeader: {
+    fontSize: 16,
+    fontWeight: "600",
+    textAlign: "center",
+    marginBottom: 10,
+    color: "#444",
+  },
+  totalsRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: 25,
+  },
+  totalBox: {
+    flex: 1,
     padding: 15,
     borderRadius: 12,
-    marginBottom: 25,
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 15,
-    justifyContent: "space-between",
+    marginHorizontal: 6,
   },
-  summaryItem: {
-    width: "45%",
-    backgroundColor: "#f9e3e3",
-    padding: 12,
-    borderRadius: 10,
+  greenBox: {
+    backgroundColor: "#d9f8e3",
     alignItems: "center",
   },
-  summaryNumber: {
-    fontSize: 22,
-    fontWeight: "700",
+  pinkBox: {
+    backgroundColor: "#f9e3e3",
+    justifyContent: "center",
   },
-  summaryLabel: {
+  calorieNumber: {
+    fontSize: 32,
+    fontWeight: "700",
+    color: "#222",
+  },
+  calorieLabel: {
     fontSize: 14,
     color: "#555",
+    marginTop: 4,
+  },
+  macrosRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+  },
+  macroItem: {
+    alignItems: "center",
+    flex: 1,
+  },
+  macroNumber: {
+    fontSize: 28,
+    fontWeight: "700",
+    color: "#222",
+  },
+  macroLabel: {
+    fontSize: 12,
+    color: "#555",
     textAlign: "center",
+    marginTop: 2,
   },
   mealsTitle: {
     fontSize: 20,
     fontWeight: "600",
     marginBottom: 10,
   },
-  sectionHeader: {
-  fontSize: 16,
-  fontWeight: "600",
-  textAlign: "center",
-  marginBottom: 10,
-  color: "#444",
-},
-
-totalsRow: {
-  flexDirection: "row",
-  justifyContent: "space-between",
-  marginBottom: 25,
-},
-
-totalBox: {
-  flex: 1,
-  padding: 15,
-  borderRadius: 12,
-  marginHorizontal: 6,
-},
-
-greenBox: {
-  backgroundColor: "#d9f8e3", // light green
-  alignItems: "center",
-},
-
-pinkBox: {
-  backgroundColor: "#f9e3e3", // light pink
-  justifyContent: "center",
-},
-
-calorieNumber: {
-  fontSize: 32,
-  fontWeight: "700",
-  color: "#222",
-},
-
-calorieLabel: {
-  fontSize: 14,
-  color: "#555",
-  marginTop: 4,
-},
-
-macrosRow: {
-  flexDirection: "row",
-  justifyContent: "space-between",
-},
-
-macroItem: {
-  alignItems: "center",
-  flex: 1,
-},
-
-macroNumber: {
-  fontSize: 28,
-  fontWeight: "700",
-  color: "#222",
-},
-
-macroLabel: {
-  fontSize: 12,
-  color: "#555",
-  textAlign: "center",
-  marginTop: 2,
-},
+  backButton: {
+    marginBottom: 15,
+  },
+  backButtonText: {
+    color: "#3B82F6",
+    fontSize: 16,
+    fontWeight: "600",
+  },
 });
