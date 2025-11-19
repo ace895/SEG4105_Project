@@ -30,14 +30,16 @@ export default function HistoricalMealsPage() {
         const baseUrl = getServerUrl();
         const url = `${baseUrl}/get-meals?email=${encodeURIComponent(userEmail)}&date=${date}`;
 
+        console.log("Fetching meals from:", url);
         const res = await fetch(url);
         const data = await res.json();
+        console.log("Received meal data:", data);
 
         const parsedMeals: Meal[] = [];
 
         Object.entries(data).forEach(([time, mealData]: any, index) => {
           const ingredientArray = Object.entries(mealData)
-            .filter(([k]) => k !== "image_filename")
+            .filter(([k]) => k !== "image_filename" && k !== "image_url" && k !== "meal_id")
             .map(([name, info]: any) => ({
               name,
               calories: info.calorie,
@@ -47,8 +49,16 @@ export default function HistoricalMealsPage() {
               carbs: info.carb,
             }));
 
+          // Get image URL from backend (either image_url or legacy image_filename)
+          const imageUrl = mealData.image_url || mealData.image_filename;
+          const fullImageUrl = imageUrl
+            ? imageUrl.startsWith('http')
+              ? imageUrl  // Already full URL
+              : `${getServerUrl()}/get-meal-image/${imageUrl}`  // Construct proxy URL
+            : "";
+
           parsedMeals.push({
-            id: `${date}-${index}`,
+            id: mealData.meal_id ? String(mealData.meal_id) : `${date}-${index}`,
             name: ingredientArray.map((i) => i.name).join(", "),
             time,
             calories: ingredientArray.reduce((a, b) => a + b.calories, 0),
@@ -57,9 +67,7 @@ export default function HistoricalMealsPage() {
             fats: ingredientArray.reduce((a, b) => a + b.fats, 0),
             carbs: ingredientArray.reduce((a, b) => a + b.carbs, 0),
             ingredients: ingredientArray,
-            imageUri: mealData.image_filename
-              ? `${getServerUrl()}/uploads/${mealData.image_filename}`
-              : "",
+            imageUri: fullImageUrl,
           });
         });
 
@@ -116,15 +124,15 @@ export default function HistoricalMealsPage() {
         <View style={[styles.totalBox, styles.pinkBox]}>
           <View style={styles.macrosRow}>
             <View style={styles.macroItem}>
-              <Text style={styles.macroNumber}>{totalProtein}</Text>
+              <Text style={styles.macroNumber}>{totalProtein.toFixed(1)}</Text>
               <Text style={styles.macroLabel}>grams protein</Text>
             </View>
             <View style={styles.macroItem}>
-              <Text style={styles.macroNumber}>{totalFat}</Text>
+              <Text style={styles.macroNumber}>{totalFat.toFixed(1)}</Text>
               <Text style={styles.macroLabel}>grams fat</Text>
             </View>
             <View style={styles.macroItem}>
-              <Text style={styles.macroNumber}>{totalCarbs}</Text>
+              <Text style={styles.macroNumber}>{totalCarbs.toFixed(1)}</Text>
               <Text style={styles.macroLabel}>grams carbs</Text>
             </View>
           </View>

@@ -32,7 +32,7 @@ interface User {
 }
 
 export default function Profile() {
-  const { email: userEmail } = useUser();
+  const { email: userEmail, setEmail } = useUser();
 
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
@@ -233,6 +233,17 @@ export default function Profile() {
           />
         </View>
 
+        {/* LOGOUT */}
+        <TouchableOpacity
+          style={styles.logoutButton}
+          onPress={() => {
+            setEmail(null);
+            router.replace("/");
+          }}
+        >
+          <Text style={styles.logoutText}>Logout</Text>
+        </TouchableOpacity>
+
       </ScrollView>
     </SafeAreaView>
   );
@@ -318,5 +329,18 @@ const styles = StyleSheet.create({
   subText: {
     color: "#888",
     fontSize: 13,
+  },
+  logoutButton: {
+    backgroundColor: "#ff4444",
+    borderRadius: 10,
+    paddingVertical: 15,
+    alignItems: "center",
+    marginTop: 10,
+    marginBottom: 20,
+  },
+  logoutText: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "600",
   },
 });

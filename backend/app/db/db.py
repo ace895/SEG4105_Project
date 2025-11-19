@@ -1,17 +1,23 @@
-import sqlite3
+import os
+import psycopg2
+from psycopg2.extras import RealDictCursor
+from dotenv import load_dotenv
 
-DB_NAME = "food_logger.db"
+load_dotenv()
+
+DATABASE_URL = os.getenv("DATABASE_URL")
+
 
 def get_db_connection():
     """
-    Returns a connection object to the SQLite database.
+    Returns a connection object to the PostgreSQL database.
 
     Returns:
-        sqlite3.Connection: A connection to the database.
+        psycopg2.Connection: A connection to the database.
     """
-    conn = sqlite3.connect(DB_NAME)
-    conn.row_factory = sqlite3.Row
+    conn = psycopg2.connect(DATABASE_URL, cursor_factory=RealDictCursor)
     return conn
+
 
 def initialize_database():
     """
@@ -20,8 +26,9 @@ def initialize_database():
     conn = get_db_connection()
     cursor = conn.cursor()
 
-    #Execute CREATE TABLE statements
-    cursor.executescript("""
+    # Execute CREATE TABLE statements (PostgreSQL syntax)
+    cursor.execute(
+        """
     CREATE TABLE IF NOT EXISTS users (
         email TEXT PRIMARY KEY,
         password TEXT NOT NULL,
@@ -31,20 +38,44 @@ def initialize_database():
         goal TEXT,
         age INTEGER,
         allergies TEXT,
-        notifications_on BOOLEAN DEFAULT 1
+        notifications_on BOOLEAN DEFAULT true
     );
+    """
+    )
 
+    cursor.execute(
+        """
     CREATE TABLE IF NOT EXISTS meals (
-        meal_id INTEGER PRIMARY KEY AUTOINCREMENT,
+        meal_id SERIAL PRIMARY KEY,
         user_email TEXT NOT NULL,
         meal_date DATE NOT NULL,
         meal_time TIME NOT NULL,
+        image_url TEXT,
         FOREIGN KEY (user_email) REFERENCES users(email)
             ON DELETE CASCADE
     );
+    """
+    )
 
+    # Add image_url column if it doesn't exist (for existing databases)
+    cursor.execute(
+        """
+    DO $$ 
+    BEGIN 
+        IF NOT EXISTS (
+            SELECT 1 FROM information_schema.columns 
+            WHERE table_name='meals' AND column_name='image_url'
+        ) THEN
+            ALTER TABLE meals ADD COLUMN image_url TEXT;
+        END IF;
+    END $$;
+    """
+    )
+
+    cursor.execute(
+        """
     CREATE TABLE IF NOT EXISTS ingredient_items (
-        ingredient_id INTEGER PRIMARY KEY AUTOINCREMENT,
+        ingredient_id SERIAL PRIMARY KEY,
         meal_id INTEGER NOT NULL,
         ingredient_name TEXT NOT NULL,
         calorie REAL,
@@ -55,9 +86,16 @@ def initialize_database():
         FOREIGN KEY (meal_id) REFERENCES meals(meal_id)
             ON DELETE CASCADE
     );
-    """)
+    """
+    )
 
     conn.commit()
     conn.close()
 
-initialize_database()
+
+# Initialize database (skip if connection fails for local development)
+try:
+    initialize_database()
+except Exception as e:
+    print(f"⚠️  Database initialization skipped: {e}")
+    print("⚠️  Server will start but database operations may fail")

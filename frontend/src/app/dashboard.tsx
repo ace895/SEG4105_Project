@@ -6,6 +6,7 @@ import { router } from "expo-router";
 import * as ImagePicker from "expo-image-picker";
 import { Calendar } from 'react-native-calendars';
 import { useUser } from "../context/UserContext";
+import { getServerUrl } from "../utils/api";
 
 
 interface MacroData {
@@ -154,11 +155,83 @@ const mockBackendData: { [key: string]: { [key: number]: DailyData } } = {
   },
 };
 
-const fetchDailyData = async (week: string, date: number): Promise<DailyData> => {
-  await new Promise(resolve => setTimeout(resolve, 300));
-  
-  const weekData = mockBackendData[week] || mockBackendData['This Week'];
-  return weekData[date] || weekData[6];
+const fetchDailyData = async (email: string, date: Date): Promise<DailyData> => {
+  try {
+    const baseUrl = getServerUrl();
+    const dateStr = date.toISOString().split('T')[0]; // YYYY-MM-DD
+    const url = `${baseUrl}/get-meals?email=${encodeURIComponent(email)}&date=${dateStr}`;
+
+    const res = await fetch(url);
+    const data = await res.json();
+
+    let totalCalories = 0;
+    let totalProteins = 0;
+    let totalCarbs = 0;
+    let totalFats = 0;
+
+    // Sum up all meals for the day
+    Object.values(data).forEach((mealData: any) => {
+      Object.entries(mealData)
+        .filter(([k]) => k !== "image_filename" && k !== "image_url" && k !== "meal_id")
+        .forEach(([_, info]: any) => {
+          totalCalories += info.calorie || 0;
+          totalProteins += info.protein || 0;
+          totalCarbs += info.carb || 0;
+          totalFats += info.fat || 0;
+        });
+    });
+
+    // Calculate percentages based on typical daily goals
+    const calorieGoal = 2500;
+    const proteinGoal = 150;
+    const carbGoal = 300;
+    const fatGoal = 90;
+
+    return {
+      totalCalories,
+      macros: [
+        {
+          name: 'Calories',
+          color: '#4ADE80',
+          percentage: Math.min(100, Math.round((totalCalories / calorieGoal) * 100)),
+          current: totalCalories,
+          goal: calorieGoal
+        },
+        {
+          name: 'Proteins',
+          color: '#3B82F6',
+          percentage: Math.min(100, Math.round((totalProteins / proteinGoal) * 100)),
+          current: Math.round(totalProteins),
+          goal: proteinGoal
+        },
+        {
+          name: 'Carbs',
+          color: '#FB923C',
+          percentage: Math.min(100, Math.round((totalCarbs / carbGoal) * 100)),
+          current: Math.round(totalCarbs),
+          goal: carbGoal
+        },
+        {
+          name: 'Fats',
+          color: '#F87171',
+          percentage: Math.min(100, Math.round((totalFats / fatGoal) * 100)),
+          current: Math.round(totalFats),
+          goal: fatGoal
+        },
+      ],
+    };
+  } catch (err) {
+    console.error("Error fetching daily data:", err);
+    return {
+      totalCalories: 0,
+      macros: [
+        { name: 'Calories', color: '#4ADE80', percentage: 0, current: 0, goal: 2500 },
+        { name: 'Proteins', color: '#3B82F6', percentage: 0, current: 0, goal: 150 },
+        { name: 'Carbs', color: '#FB923C', percentage: 0, current: 0, goal: 300 },
+        { name: 'Fats', color: '#F87171', percentage: 0, current: 0, goal: 90 },
+      ],
+    };
+  }
 };
 
 
@@ -174,19 +247,19 @@ export default function Dashboard() {
   const [showPickerModal, setShowPickerModal] = useState(false);
 
   const formatLocalDateISO = (date: Date) =>
-  new Date(date.getFullYear(), date.getMonth(), date.getDate())
-    .toISOString()
-    .split("T")[0];
+    new Date(date.getFullYear(), date.getMonth(), date.getDate())
+      .toISOString()
+      .split("T")[0];
 
-  
+
   const formatDate = (date: Date) => {
     const options: Intl.DateTimeFormatOptions = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
     return date.toLocaleDateString('en-US', options);
   };
-  
+
   const getWeekDatesAroundSelected = (centerDate: Date) => {
     const weekDates = [];
-    
+
     for (let i = -3; i <= 3; i++) {
       const date = new Date(centerDate);
       date.setDate(centerDate.getDate() + i);
@@ -200,22 +273,24 @@ export default function Dashboard() {
     }
     return weekDates;
   };
-  
+
   const weekDays = getWeekDatesAroundSelected(selectedDate);
 
   useEffect(() => {
+    if (!userEmail) return;
+
     const loadData = async () => {
       setLoading(true);
-      const data = await fetchDailyData('This Week', selectedDate.getDate());
+      const data = await fetchDailyData(userEmail, selectedDate);
       setDailyData(data);
       setLoading(false);
     };
     loadData();
-  }, [selectedDate]);
+  }, [selectedDate, userEmail]);
 
 
   //Camera
-   const openCamera = async () => {
+  const openCamera = async () => {
     const permission = await ImagePicker.requestCameraPermissionsAsync();
     if (permission.status !== "granted") {
       alert("Camera permission is required.");
@@ -238,6 +313,12 @@ export default function Dashboard() {
   //Gallery
 
   const openGallery = async () => {
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (permission.status !== "granted") {
+      alert("Media library permission required.");
+      return;
+    }
+
     const result = await ImagePicker.launchImageLibraryAsync({
       allowsEditing: true,
       quality: 0.7,
@@ -269,9 +350,9 @@ export default function Dashboard() {
           animationType="slide"
           onRequestClose={() => setShowMenu(false)}
         >
-          <TouchableOpacity 
-            style={styles.menuOverlay} 
-            activeOpacity={1} 
+          <TouchableOpacity
+            style={styles.menuOverlay}
+            activeOpacity={1}
             onPress={() => setShowMenu(false)}
           >
             <View style={styles.menuContent}>
@@ -281,8 +362,8 @@ export default function Dashboard() {
                   <Ionicons name="close" size={28} color="#333" />
                 </TouchableOpacity>
               </View>
-              
-              <TouchableOpacity 
+
+              <TouchableOpacity
                 style={styles.menuItem}
                 onPress={() => {
                   setShowMenu(false);
@@ -293,7 +374,7 @@ export default function Dashboard() {
                 <Text style={styles.menuItemText}>Dashboard</Text>
               </TouchableOpacity>
 
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={styles.menuItem}
                 onPress={() => {
                   setShowMenu(false);
@@ -304,7 +385,7 @@ export default function Dashboard() {
                 <Text style={styles.menuItemText}>Profile</Text>
               </TouchableOpacity>
 
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={styles.menuItem}
                 onPress={() => {
                   setShowMenu(false);
@@ -315,7 +396,7 @@ export default function Dashboard() {
                 <Text style={styles.menuItemText}>Recommendations</Text>
               </TouchableOpacity>
 
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={styles.menuItem}
                 onPress={() => {
                   setShowMenu(false);
@@ -346,7 +427,7 @@ export default function Dashboard() {
             </TouchableOpacity>
 
             <View style={styles.weekSection}>
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={styles.dateHeader}
                 onPress={() => setShowCalendar(!showCalendar)}
               >
@@ -356,100 +437,103 @@ export default function Dashboard() {
                 </View>
                 <Ionicons name={showCalendar ? "chevron-up" : "chevron-down"} size={20} color="#333" />
               </TouchableOpacity>
-          
-          {showCalendar && (
-            <View style={styles.calendarContainer}>
-              <Calendar
-                current={selectedDate.toISOString().split('T')[0]}
-                maxDate={new Date().toISOString().split('T')[0]}
-                onDayPress={(day: any) => {
-                  const newDate = new Date(day.year, day.month - 1, day.day);
-                  setSelectedDate(newDate);
-                  setShowCalendar(false);
-                }}
-                markedDates={{
-                  [selectedDate.toISOString().split('T')[0]]: {
-                    selected: true,
-                    selectedColor: '#3B82F6'
-                  }
-                }}
-                theme={{
-                  todayTextColor: '#3B82F6',
-                  selectedDayBackgroundColor: '#3B82F6',
-                  selectedDayTextColor: '#ffffff',
-                  arrowColor: '#3B82F6',
-                }}
-              />
-            </View>
-          )}
-          
-          <View style={styles.weekDays}>
-            {weekDays.map((item, index) => {
-              const isSelected = item.fullDate.toDateString() === selectedDate.toDateString();
-              return (
-                <TouchableOpacity 
-                  key={index} 
-                  style={styles.dayItem}
-                  onPress={() => setSelectedDate(item.fullDate)}
-                >
-                  <Text style={styles.dayText}>{item.day}</Text>
-                  <Text style={[
-                    styles.dateText, 
-                    isSelected && styles.activeDate
-                  ]}>
-                    {item.date}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
 
-            <TouchableOpacity
-            style={styles.reviewMealsButton}
-            onPress={() =>
-              router.push({
-                pathname: "/historical-meals",
-                params: { date: formatLocalDateISO(selectedDate) },
-              })
-            }
-          >
-            <Text style={styles.reviewMealsText}>Review Meals</Text>
-          </TouchableOpacity>
-        </View>
+              {showCalendar && (
+                <View style={styles.calendarContainer}>
+                  <Calendar
+                    current={selectedDate.toISOString().split('T')[0]}
+                    maxDate={new Date().toISOString().split('T')[0]}
+                    onDayPress={(day: any) => {
+                      const newDate = new Date(day.year, day.month - 1, day.day);
+                      setSelectedDate(newDate);
+                      setShowCalendar(false);
+                    }}
+                    markedDates={{
+                      [selectedDate.toISOString().split('T')[0]]: {
+                        selected: true,
+                        selectedColor: '#3B82F6'
+                      }
+                    }}
+                    theme={{
+                      todayTextColor: '#3B82F6',
+                      selectedDayBackgroundColor: '#3B82F6',
+                      selectedDayTextColor: '#ffffff',
+                      arrowColor: '#3B82F6',
+                    }}
+                  />
+                </View>
+              )}
 
-        <View style={styles.macroSection}>
-          <View style={styles.macroHeader}>
-            <Text style={styles.macroTitle}>Today's Macros</Text>
-          </View>
-
-          {dailyData?.macros.map((macro, index) => (
-            <View key={index} style={styles.macroItem}>
-              <Text style={styles.macroName}>{macro.name}</Text>
-              <View style={styles.progressBarContainer}>
-                <View
-                  style={[
-                    styles.progressBar,
-                    { width: `${macro.percentage}%`, backgroundColor: macro.color },
-                  ]}
-                />
+              <View style={styles.weekDays}>
+                {weekDays.map((item, index) => {
+                  const isSelected = item.fullDate.toDateString() === selectedDate.toDateString();
+                  return (
+                    <TouchableOpacity
+                      key={index}
+                      style={styles.dayItem}
+                      onPress={() => setSelectedDate(item.fullDate)}
+                    >
+                      <Text style={styles.dayText}>{item.day}</Text>
+                      <Text style={[
+                        styles.dateText,
+                        isSelected && styles.activeDate
+                      ]}>
+                        {item.date}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
               </View>
+
+              <TouchableOpacity
+                style={styles.reviewMealsButton}
+                onPress={() =>
+                  router.push({
+                    pathname: "/historical-meals",
+                    params: { date: formatLocalDateISO(selectedDate) },
+                  })
+                }
+              >
+                <Text style={styles.reviewMealsText}>Review Meals</Text>
+              </TouchableOpacity>
             </View>
-          ))}
-        </View>
 
-        <View style={styles.trackMessage}>
-          <Text style={styles.trackText}>You're on track, keep going!</Text>
-          <Ionicons name="checkmark-circle" size={24} color="#4ADE80" />
-        </View>
+            <View style={styles.macroSection}>
+              <View style={styles.macroHeader}>
+                <Text style={styles.macroTitle}>Today's Macros</Text>
+              </View>
 
-        <TouchableOpacity style={styles.recommendationsButton} onPress={() => router.push("/recommendations")}>
-          <Text style={styles.recommendationsText}>Recipe Recommendations</Text>
-        </TouchableOpacity>
+              {dailyData?.macros.map((macro, index) => (
+                <View key={index} style={styles.macroItem}>
+                  <View style={styles.macroRow}>
+                    <Text style={styles.macroName}>{macro.name}</Text>
+                    <Text style={styles.macroValues}>{macro.current} / {macro.goal}</Text>
+                  </View>
+                  <View style={styles.progressBarContainer}>
+                    <View
+                      style={[
+                        styles.progressBar,
+                        { width: `${macro.percentage}%`, backgroundColor: macro.color },
+                      ]}
+                    />
+                  </View>
+                </View>
+              ))}
+            </View>
+
+            <View style={styles.trackMessage}>
+              <Text style={styles.trackText}>You're on track, keep going!</Text>
+              <Ionicons name="checkmark-circle" size={24} color="#4ADE80" />
+            </View>
+
+            <TouchableOpacity style={styles.recommendationsButton} onPress={() => router.push("/recommendations")}>
+              <Text style={styles.recommendationsText}>Recipe Recommendations</Text>
+            </TouchableOpacity>
           </>
         )}
       </ScrollView>
 
-      
+
       <Modal visible={showPickerModal} transparent animationType="fade">
         <View style={styles.modalOverlay}>
           <View style={styles.modalBox}>
@@ -475,7 +559,7 @@ export default function Dashboard() {
               <Text style={styles.modalText}>Choose from Gallery</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity 
+            <TouchableOpacity
               style={[styles.modalBtn, styles.cancelBtn]}
               onPress={() => setShowPickerModal(false)}
             >
@@ -629,10 +713,20 @@ const styles = StyleSheet.create({
   macroItem: {
     marginBottom: 15,
   },
+  macroRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
   macroName: {
     fontSize: 16,
     fontWeight: '500',
-    marginBottom: 8,
+  },
+  macroValues: {
+    fontSize: 14,
+    color: '#666',
+    fontWeight: '500',
   },
   progressBarContainer: {
     height: 12,
