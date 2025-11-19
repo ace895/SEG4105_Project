@@ -1,0 +1,18 @@
+# Core Flask API
+flask==3.1.2
+flask-cors==6.0.1
+werkzeug
+gunicorn
+
+# Database
+psycopg2-binary
+python-dotenv
+
+# AWS Storage
+boto3
+
+# Authentication
+authlib
+
+# Utilities
+requests
