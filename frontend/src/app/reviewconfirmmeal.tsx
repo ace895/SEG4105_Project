@@ -164,14 +164,24 @@ export default function ReviewConfirmMeal() {
       };
     });
 
-    // Create timestamp with local timezone offset to preserve local date/time
+    // Create a local ISO timestamp including timezone offset (e.g. 2025-11-19T13:45:00-05:00)
     const now = new Date();
-    const timezoneOffset = now.getTimezoneOffset() * 60000; // offset in milliseconds
-    const localTime = new Date(now.getTime() - timezoneOffset).toISOString().slice(0, -1);
+    const pad = (n: number) => String(n).padStart(2, "0");
+    const y = now.getFullYear();
+    const mo = pad(now.getMonth() + 1);
+    const d = pad(now.getDate());
+    const hh = pad(now.getHours());
+    const mm = pad(now.getMinutes());
+    const ss = pad(now.getSeconds());
+    const offsetMinutes = -now.getTimezoneOffset(); // positive east of UTC
+    const sign = offsetMinutes >= 0 ? "+" : "-";
+    const offH = pad(Math.floor(Math.abs(offsetMinutes) / 60));
+    const offM = pad(Math.abs(offsetMinutes) % 60);
+    const localIsoWithOffset = `${y}-${mo}-${d}T${hh}:${mm}:${ss}${sign}${offH}:${offM}`;
 
     const payload = {
       email: userEmail,
-      time: localTime + 'Z', // Treat local time as if it were UTC so backend saves it correctly
+      time: localIsoWithOffset, // timestamp including timezone offset (local)
       ingredients: ingredientObject,
       image_url: currentImage, // Include S3 image URL
       edited: false,

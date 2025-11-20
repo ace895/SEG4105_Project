@@ -158,7 +158,7 @@ const mockBackendData: { [key: string]: { [key: number]: DailyData } } = {
 const fetchDailyData = async (email: string, date: Date): Promise<DailyData> => {
   try {
     const baseUrl = getServerUrl();
-    const dateStr = date.toISOString().split('T')[0]; // YYYY-MM-DD
+    const dateStr = formatLocalDateISO(date); // YYYY-MM-DD (local)
     const url = `${baseUrl}/get-meals?email=${encodeURIComponent(email)}&date=${dateStr}`;
 
     const res = await fetch(url);
@@ -234,6 +234,14 @@ const fetchDailyData = async (email: string, date: Date): Promise<DailyData> => 
   }
 };
 
+// Top-level helper: format a Date into local YYYY-MM-DD string (no timezone shift)
+export function formatLocalDateISO(date: Date) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
 
 
 
@@ -246,10 +254,7 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [showPickerModal, setShowPickerModal] = useState(false);
 
-  const formatLocalDateISO = (date: Date) =>
-    new Date(date.getFullYear(), date.getMonth(), date.getDate())
-      .toISOString()
-      .split("T")[0];
+  // formatLocalDateISO is defined at module scope and imported above
 
 
   const formatDate = (date: Date) => {
@@ -441,15 +446,15 @@ export default function Dashboard() {
               {showCalendar && (
                 <View style={styles.calendarContainer}>
                   <Calendar
-                    current={selectedDate.toISOString().split('T')[0]}
-                    maxDate={new Date().toISOString().split('T')[0]}
+                    current={formatLocalDateISO(selectedDate)}
+                    maxDate={formatLocalDateISO(new Date())}
                     onDayPress={(day: any) => {
                       const newDate = new Date(day.year, day.month - 1, day.day);
                       setSelectedDate(newDate);
                       setShowCalendar(false);
                     }}
                     markedDates={{
-                      [selectedDate.toISOString().split('T')[0]]: {
+                      [formatLocalDateISO(selectedDate)]: {
                         selected: true,
                         selectedColor: '#3B82F6'
                       }
