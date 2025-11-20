@@ -47,9 +47,15 @@ export default function ReviewMealLoader() {
         const data = await res.json();
 
 
-        // Use S3 image_url from backend response
+        // Use S3 image_url from backend response. If backend returns a filename
         const ingredientsData = data.ingredients || data;
-        const s3ImageUrl = data.image_url || imageUri;
+        let s3ImageUrl = data.image_url || imageUri;
+        if (s3ImageUrl && !s3ImageUrl.startsWith("http")) {
+          const filename = s3ImageUrl.includes("/")
+            ? s3ImageUrl.split("/").pop()
+            : s3ImageUrl;
+          s3ImageUrl = `${getServerUrl()}/get-meal-image/${filename}`;
+        }
 
         const ingredients = Object.entries(ingredientsData).map(([name, info]: any) => ({
           name,

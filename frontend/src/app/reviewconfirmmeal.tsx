@@ -43,6 +43,14 @@ export default function ReviewConfirmMeal() {
   const [pickerMode, setPickerMode] = useState<"retake" | "add" | null>(null);
 
   // ---- PROCESS IMAGE THROUGH BACKEND AGAIN ----
+  React.useEffect(() => {
+    if (!currentImage) return;
+    if (!currentImage.startsWith("http")) {
+      const filename = currentImage.includes("/") ? currentImage.split("/").pop() : currentImage;
+      setCurrentImage(`${getServerUrl()}/get-meal-image/${filename}`);
+    }
+  }, [currentImage]);
+
   const processNewImage = async (uri: string) => {
     const baseUrl = getServerUrl();
     const formData = new FormData();
