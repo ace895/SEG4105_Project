@@ -3,33 +3,53 @@ import secrets
 from pathlib import Path
 import uuid
 from dotenv import load_dotenv
-from flask import Flask, redirect, request, jsonify, send_from_directory, session, url_for
+from flask import (
+    Flask,
+    redirect,
+    request,
+    jsonify,
+    send_from_directory,
+    session,
+    url_for,
+)
 from flask_cors import CORS, cross_origin
 from authlib.integrations.flask_client import OAuth
 
 from app.db.meal_db import add_meal, edit_meal, get_meal_history, get_meals
-from app.db.user_db import edit_dietary_info, edit_goal, get_profile, signup, toggle_notifications
+from app.db.user_db import (
+    edit_dietary_info,
+    edit_goal,
+    get_profile,
+    signup,
+    toggle_notifications,
+)
 
-from .utils.process_meal import process_image
-from .utils.utils import login, authenticate, get_recommendations, get_status
+# Try to import ML model (for local development), fallback to stub (for AWS deployment)
+try:
+    from app.utils.process_meal import process_image
+
+    print("✅ Using local ML (CLIP + DINO models)")
+except Exception as e:
+    print(f"⚠️  ML models not available: {e}")
+    print("⚠️  Using stub ML (returns mock data)")
+    from app.utils.process_meal_stub import process_image
+
+from app.utils.utils import login, authenticate, get_recommendations, get_status
 
 import tempfile
 import os
 from uuid import uuid4
+import boto3
+from botocore.exceptions import ClientError
 
 load_dotenv()
 
 app = Flask(__name__)
-CORS(app)
-CORS(app, resources={
-    r"/*": {
-        "origins": ["http://localhost:8081", "http://127.0.0.1:8081",],
-        "supports_credentials": True
-    }
-})
+# Enable CORS for all origins (needed for mobile apps)
+CORS(app, resources={r"/*": {"origins": "*", "supports_credentials": False}})
 app.secret_key = os.environ.get("SECRET_KEY", secrets.token_hex(32))
 
-#Initialize oauth providers (Google and Microsoft)
+# Initialize oauth providers (Google and Microsoft)
 oauth = OAuth(app)
 try:
     google = oauth.register(
@@ -43,6 +63,42 @@ try:
 except Exception as e:
     print(f"OAuth not available: {e}")
 
+
+# S3 Configuration
+S3_BUCKET = os.getenv("S3_BUCKET_NAME", "meal-tracker-images-1763316435")
+AWS_REGION = os.getenv("AWS_REGION", "us-east-1")
+
+
+def upload_image_to_s3(file_path, filename):
+    """
+    Upload an image file to S3 and return the public URL.
+
+    Args:
+        file_path (str): Local path to the image file
+        filename (str): Desired filename in S3
+
+    Returns:
+        str: Public URL of the uploaded image, or None if upload fails
+    """
+    try:
+        s3_client = boto3.client("s3", region_name=AWS_REGION)
+
+        s3_client.upload_file(
+            file_path,
+            S3_BUCKET,
+            f"meals/{filename}",
+            ExtraArgs={"ContentType": "image/jpeg"},
+        )
+
+        image_url = f"{filename}"
+        print(f"✅ Image uploaded to S3: meals/{filename}")
+        return image_url
+
+    except ClientError as e:
+        print(f"⚠️  Failed to upload image to S3: {e}")
+        return None
+
+
 @app.route("/", methods=["GET"])
 def test():
     """
@@ -52,6 +108,7 @@ def test():
         JSON response confirming connection.
     """
     return jsonify({"message": "Connected"}), 200
+
 
 @app.route("/auth/<provider>")
 def auth(provider):
@@ -67,10 +124,13 @@ def auth(provider):
     """
 
     oauth_provider = oauth.create_client(provider)
-    session["frontend_redirect"] = request.args.get("redirect_uri") #Store redirect URI
+    session["frontend_redirect"] = request.args.get(
+        "redirect_uri"
+    )  # Store redirect URI
     callback_uri = url_for("auth_callback", provider=provider, _external=True)
 
     return oauth_provider.authorize_redirect(callback_uri)
+
 
 @app.route("/auth/<provider>/callback")
 def auth_callback(provider):
@@ -83,8 +143,8 @@ def auth_callback(provider):
 
     oauth_provider = oauth.create_client(provider)
     token = oauth_provider.authorize_access_token()
-    
-    #Get user information in a session
+
+    # Get user information in a session
     user_info = oauth_provider.parse_id_token(token)
     session["user"] = {
         "id": user_info["sub"],
@@ -92,9 +152,10 @@ def auth_callback(provider):
         "name": user_info.get("name"),
     }
 
-    #Retrieve redirect URI 
-    frontend_redirect = session.pop("frontend_redirect", "/") 
+    # Retrieve redirect URI
+    frontend_redirect = session.pop("frontend_redirect", "/")
     return redirect(frontend_redirect)
+
 
 @app.route("/me")
 def me():
@@ -112,6 +173,7 @@ def me():
     if "user" in session:
         return jsonify(session["user"])
     return jsonify({"error": "Not logged in"}), 401
+
 
 @app.route("/login", methods=["POST"])
 def login_user():
@@ -139,6 +201,7 @@ def login_user():
     else:
         return jsonify({"success": False, "message": "Invalid credentials"}), 401
 
+
 @app.route("/authenticate", methods=["POST"])
 def user_authenticate():
     """
@@ -164,6 +227,7 @@ def user_authenticate():
         return jsonify({"success": True}), 200
     else:
         return jsonify({"success": False, "message": "Invalid verification code"}), 401
+
 
 @app.route("/signup", methods=["POST"])
 def user_signup():
@@ -203,12 +267,12 @@ def get_user_profile():
     Returns:
         200 OK with user profile:
             {
-                "name": "John", 
-                "height": 170, 
-                "weight": 70, 
-                "goal": "Muscle gain", 
-                "age": 25, 
-                "allergies": "None", 
+                "name": "John",
+                "height": 170,
+                "weight": 70,
+                "goal": "Muscle gain",
+                "age": 25,
+                "allergies": "None",
                 "notifications_on": False
             }
     """
@@ -219,6 +283,7 @@ def get_user_profile():
         return jsonify({"error": "User not found"}), 404
 
     return jsonify(profile), 200
+
 
 @app.route("/get-status", methods=["GET"])
 def get_user_status():
@@ -236,6 +301,7 @@ def get_user_status():
 
     status = get_status(email)
     return jsonify({"status": status}), 200
+
 
 @app.route("/get-meal-history", methods=["GET"])
 def get_user_meal_history():
@@ -270,6 +336,7 @@ def get_user_meal_history():
     history = get_meal_history(email, start_date, end_date)
     return jsonify(history), 200
 
+
 @app.route("/get-meals", methods=["GET"])
 def get_user_meal():
     """
@@ -298,10 +365,11 @@ def get_user_meal():
     meals = get_meals(email, date)
     return jsonify(meals), 200
 
+
 @app.route("/get-recommendations", methods=["GET"])
 def get_user_recommendations():
     """
-    Provides food recommendations based on a user's goal and current intake. To retrieve the image, 
+    Provides food recommendations based on a user's goal and current intake. To retrieve the image,
     call fetch on the image_url
 
     Query Parameters:
@@ -327,6 +395,7 @@ def get_user_recommendations():
     recommendations = get_recommendations(email)
     return jsonify(recommendations), 200
 
+
 @app.route("/process-meal-image", methods=["POST"])
 def process_user_meal_image():
     """
@@ -348,23 +417,30 @@ def process_user_meal_image():
 
     image = request.files["image"]
 
-
     import tempfile
     import uuid
+
     temp_filename = f"{uuid.uuid4()}.jpg"
     temp_path = os.path.join(tempfile.gettempdir(), temp_filename)
 
     print(f"[process-meal-image] Saving temp file to: {temp_path}")
 
-
     image.save(temp_path)
 
     try:
+        # Process image with ML to get ingredients
         ingredients = process_image(temp_path)
 
-        print("[process-meal-image] Returning results:", ingredients)
+        # Upload image to S3 for permanent storage
+        s3_filename = f"{uuid.uuid4()}.jpg"
+        image_url = upload_image_to_s3(temp_path, s3_filename)
 
-        return jsonify(ingredients), 200
+        # Add image URL to response
+        response = {"ingredients": ingredients, "image_url": image_url}
+
+        print("[process-meal-image] Returning results:", response)
+
+        return jsonify(response), 200
 
     except Exception as e:
         print("[process-meal-image] ERROR:", e)
@@ -403,6 +479,7 @@ def add_user_meal():
         return jsonify({"success": True}), 201
     return jsonify({"success": False}), 400
 
+
 @app.route("/edit-meal", methods=["PUT"])
 def edit_user_meal():
     """
@@ -428,6 +505,42 @@ def edit_user_meal():
         return jsonify({"success": True}), 200
     return jsonify({"success": False, "message": "Meal not found"}), 404
 
+
+@app.route("/update-meal", methods=["POST"])
+def update_user_meal():
+    """
+    Updates an existing meal's ingredients by meal_id.
+
+    Request JSON:
+        {
+            "meal_id": 123,
+            "email": "user@example.com",
+            "ingredients": {
+                "apple": {"calorie": 95, "protein": 0.3, "fat": 0.2, "carb": 25, "weight": 20}
+            }
+        }
+
+    Returns:
+        200 OK: If successful.
+        400 Bad Request: If meal not found or unauthorized.
+    """
+    data = request.get_json()
+    meal_id = data.get("meal_id")
+    email = data.get("email")
+    ingredients = data.get("ingredients")
+
+    if not meal_id or not email or not ingredients:
+        return jsonify({"success": False, "message": "Missing required fields"}), 400
+
+    from app.db.meal_db import update_meal
+
+    success = update_meal(meal_id, email, ingredients)
+
+    if success:
+        return jsonify({"success": True}), 200
+    return jsonify({"success": False, "message": "Meal not found or unauthorized"}), 400
+
+
 @app.route("/toggle-notifications", methods=["POST"])
 def toggle_notifications_setting():
     """
@@ -445,6 +558,7 @@ def toggle_notifications_setting():
     email = data.get("email")
     success = toggle_notifications(email)
     return jsonify({"success": success}), 200
+
 
 @app.route("/edit-dietary-info", methods=["PUT"])
 def edit_user_dietary_info():
@@ -467,6 +581,7 @@ def edit_user_dietary_info():
     success = edit_dietary_info(data)
     return jsonify({"success": success}), 200
 
+
 @app.route("/edit-goal", methods=["PUT"])
 def edit_user_goal():
     """
@@ -487,13 +602,39 @@ def edit_user_goal():
     success = edit_goal(email, goal)
     return jsonify({"success": success}), 200
 
+
 IMAGE_FOLDER = Path.cwd() / "app" / "static" / "images"
+
+
 @app.route("/get-image/<filename>")
 def get_image(filename):
     """
-    Send an image from the image folder
+    Send an image from the local static image folder (for recommendations)
     """
     return send_from_directory(IMAGE_FOLDER, filename)
+
+
+@app.route("/get-meal-image/<filename>")
+def get_meal_image(filename):
+    """
+    Proxy endpoint to serve meal images from S3
+    This bypasses S3 Block Public Access restrictions
+    """
+    try:
+        s3_client = boto3.client("s3", region_name=AWS_REGION)
+
+        # Get the image from S3
+        response = s3_client.get_object(Bucket=S3_BUCKET, Key=f"meals/{filename}")
+
+        # Return the image data
+        from flask import Response
+
+        return Response(response["Body"].read(), mimetype="image/jpeg")
+
+    except ClientError as e:
+        print(f"⚠️  Failed to retrieve image from S3: {e}")
+        return jsonify({"error": "Image not found"}), 404
+
 
 SERVER_URL = "http://127.0.0.1:8080"
 if __name__ == "__main__":

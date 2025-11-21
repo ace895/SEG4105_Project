@@ -31,7 +31,7 @@ export default function ReviewConfirmMeal() {
     if (ingredientString && typeof ingredientString === "string") {
       parsedIngredients = JSON.parse(ingredientString);
     }
-  } catch {}
+  } catch { }
 
   const [ingredients, setIngredients] = useState<Ingredient[]>(parsedIngredients);
   const [currentImage, setCurrentImage] = useState(imageUri as string);
@@ -43,6 +43,14 @@ export default function ReviewConfirmMeal() {
   const [pickerMode, setPickerMode] = useState<"retake" | "add" | null>(null);
 
   // ---- PROCESS IMAGE THROUGH BACKEND AGAIN ----
+  React.useEffect(() => {
+    if (!currentImage) return;
+    if (!currentImage.startsWith("http")) {
+      const filename = currentImage.includes("/") ? currentImage.split("/").pop() : currentImage;
+      setCurrentImage(`${getServerUrl()}/get-meal-image/${filename}`);
+    }
+  }, [currentImage]);
+
   const processNewImage = async (uri: string) => {
     const baseUrl = getServerUrl();
     const formData = new FormData();
@@ -73,8 +81,10 @@ export default function ReviewConfirmMeal() {
     }
 
     const data = await res.json();
+    const ingredientsData = data.ingredients || data;
+    const s3ImageUrl = data.image_url || uri;
 
-    const newIngredients = Object.entries(data).map(([name, info]: any) => ({
+    const newIngredients = Object.entries(ingredientsData).map(([name, info]: any) => ({
       name,
       calories: info.calorie,
       weight: info.weight,
@@ -83,23 +93,26 @@ export default function ReviewConfirmMeal() {
       carbs: info.carb,
     }));
 
-    return newIngredients;
+    // Return both new ingredients and the S3 image URL
+    return { newIngredients, s3ImageUrl };
   };
 
   // ---- HANDLE RETAKE OR ADD PHOTO ACTION ----
   const handleImage = async (uri: string) => {
-    setLoading(true); 
-    const newIngs = await processNewImage(uri);
+    setLoading(true);
+    const result = await processNewImage(uri);
     setLoading(false);
-    if (!newIngs) return;
+    if (!result) return;
+    const { newIngredients, s3ImageUrl } = result;
 
     if (pickerMode === "retake") {
       // Replace everything
-      setCurrentImage(uri);
-      setIngredients(newIngs);
+      setCurrentImage(s3ImageUrl);
+      setIngredients(newIngredients);
     } else if (pickerMode === "add") {
       // Append ingredients
-      setIngredients((prev) => [...prev, ...newIngs]);
+      setCurrentImage(s3ImageUrl); // Always update to latest image
+      setIngredients((prev) => [...prev, ...newIngredients]);
     }
 
     setPickerMode(null);
@@ -125,6 +138,12 @@ export default function ReviewConfirmMeal() {
 
   // ---- GALLERY ----
   const openGallery = async () => {
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (permission.status !== "granted") {
+      alert("Media library permission required.");
+      return;
+    }
+
     const result = await ImagePicker.launchImageLibraryAsync({
       allowsEditing: true,
       quality: 0.7,
@@ -153,10 +172,26 @@ export default function ReviewConfirmMeal() {
       };
     });
 
+    // Create a local ISO timestamp including timezone offset (e.g. 2025-11-19T13:45:00-05:00)
+    const now = new Date();
+    const pad = (n: number) => String(n).padStart(2, "0");
+    const y = now.getFullYear();
+    const mo = pad(now.getMonth() + 1);
+    const d = pad(now.getDate());
+    const hh = pad(now.getHours());
+    const mm = pad(now.getMinutes());
+    const ss = pad(now.getSeconds());
+    const offsetMinutes = -now.getTimezoneOffset(); // positive east of UTC
+    const sign = offsetMinutes >= 0 ? "+" : "-";
+    const offH = pad(Math.floor(Math.abs(offsetMinutes) / 60));
+    const offM = pad(Math.abs(offsetMinutes) % 60);
+    const localIsoWithOffset = `${y}-${mo}-${d}T${hh}:${mm}:${ss}${sign}${offH}:${offM}`;
+
     const payload = {
       email: userEmail,
-      time: new Date().toISOString(),
+      time: localIsoWithOffset, // timestamp including timezone offset (local)
       ingredients: ingredientObject,
+      image_url: currentImage, // Include S3 image URL
       edited: false,
       before_edit: {},
       after_edit: ingredientObject,
@@ -191,19 +226,19 @@ export default function ReviewConfirmMeal() {
   const totalCarbs = safe(ingredients).reduce((s, i) => s + (i.carbs || 0), 0);
 
   if (loading) {
-  return (
-    <View style={styles.loadingScreen}>
-      <ActivityIndicator size="large" color="#4A90E2" />
-      <Text style={{ marginTop: 12, fontSize: 16 }}>Processing image...</Text>
-    </View>
-  );
-}
+    return (
+      <View style={styles.loadingScreen}>
+        <ActivityIndicator size="large" color="#4A90E2" />
+        <Text style={{ marginTop: 12, fontSize: 16 }}>Processing image...</Text>
+      </View>
+    );
+  }
 
   return (
 
-    
+
     <ScrollView contentContainerStyle={styles.container}>
-      
+
       {/* HEADER */}
       <View style={styles.headerRow}>
         <TouchableOpacity onPress={() => router.push("/dashboard")}>
@@ -234,7 +269,7 @@ export default function ReviewConfirmMeal() {
         />
       ))}
 
-      
+
 
       {/* TOTALS */}
       <View style={styles.summaryRow}>
@@ -393,13 +428,13 @@ const styles = StyleSheet.create({
   },
   modalText: { fontSize: 16 },
   loadingScreen: {
-  flex: 1,
-  justifyContent: "center",
-  alignItems: "center",
-  backgroundColor: "white",
-  paddingTop: 80,
-},
-summaryRow: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "white",
+    paddingTop: 80,
+  },
+  summaryRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     marginTop: 20,

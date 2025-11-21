@@ -1,6 +1,7 @@
 """
 Processes images to identify food and get its weight, calorie count, and macronutrient count
 """
+
 from pathlib import Path
 from PIL import Image
 from io import BytesIO
@@ -11,85 +12,95 @@ import torch
 from dotenv import load_dotenv
 
 
-
 load_dotenv()
-USE_AWS=False
+USE_AWS = False
 USDA_API_KEY = os.getenv("USDA_API_KEY")
 USDA_API_URL = "https://api.nal.usda.gov/fdc/v1/foods/search"
+
+# Debug: Check if API key is loaded
+if USDA_API_KEY:
+    print(f"✅ USDA API Key loaded (length: {len(USDA_API_KEY)})")
+else:
+    print("⚠️  WARNING: USDA_API_KEY not found in environment!")
 
 if USE_AWS:
     import sagemaker
     import boto3
     from sagemaker.huggingface import HuggingFaceModel
 
-    #Create AWS client
+    # Create AWS client
     try:
         role = sagemaker.get_execution_role()
     except ValueError:
-        iam = boto3.client('iam')
-        role = iam.get_role(RoleName='sagemaker_execution_role')['Role']['Arn']
+        iam = boto3.client("iam")
+        role = iam.get_role(RoleName="sagemaker_execution_role")["Role"]["Arn"]
 
-    #-- Object classification model (for weight estimation) --
-    #Configuration - https://huggingface.co/IDEA-Research/grounding-dino-base
+    # -- Object classification model (for weight estimation) --
+    # Configuration - https://huggingface.co/IDEA-Research/grounding-dino-base
     hub = {
-        'HF_MODEL_ID':'IDEA-Research/grounding-dino-base',
-        'HF_TASK':'zero-shot-object-detection'
+        "HF_MODEL_ID": "IDEA-Research/grounding-dino-base",
+        "HF_TASK": "zero-shot-object-detection",
     }
 
-    #Create Hugging Face Model Class
+    # Create Hugging Face Model Class
     huggingface_model = HuggingFaceModel(
-        transformers_version='4.51.3',
-        pytorch_version='2.6.0',
-        py_version='py312',
+        transformers_version="4.51.3",
+        pytorch_version="2.6.0",
+        py_version="py312",
         env=hub,
-        role=role, 
+        role=role,
     )
 
-    #Deploy model to SageMaker Inference
+    # Deploy model to SageMaker Inference
     dino_predictor = huggingface_model.deploy(
-        initial_instance_count=1, # number of instances
-        instance_type='ml.m5.xlarge' # ec2 instance type
+        initial_instance_count=1,  # number of instances
+        instance_type="ml.m5.xlarge",  # ec2 instance type
     )
 
-    #-- Image classification model (for ingredient identification)
-    #Configuration - https://huggingface.co/openai/clip-vit-base-patch32
+    # -- Image classification model (for ingredient identification)
+    # Configuration - https://huggingface.co/openai/clip-vit-base-patch32
     hub = {
-        'HF_MODEL_ID':'openai/clip-vit-base-patch32',
-        'HF_TASK':'zero-shot-image-classification'
+        "HF_MODEL_ID": "openai/clip-vit-base-patch32",
+        "HF_TASK": "zero-shot-image-classification",
     }
 
-    #Create Hugging Face Model Class
+    # Create Hugging Face Model Class
     huggingface_model = HuggingFaceModel(
-        transformers_version='4.51.3',
-        pytorch_version='2.6.0',
-        py_version='py312',
+        transformers_version="4.51.3",
+        pytorch_version="2.6.0",
+        py_version="py312",
         env=hub,
-        role=role, 
+        role=role,
     )
 
-    #Deploy model to SageMaker Inference
+    # Deploy model to SageMaker Inference
     clip_predictor = huggingface_model.deploy(
-        initial_instance_count=1, # number of instances
-        instance_type='ml.m5.xlarge' # ec2 instance type
+        initial_instance_count=1,  # number of instances
+        instance_type="ml.m5.xlarge",  # ec2 instance type
     )
 
 else:
-    #Load ingrediants
+    # Load ingrediants
     INGREDIENT_CANDIDATES = []
     current_dir = Path.cwd() / "app" / "utils"
-    with open(current_dir / 'ingredients.txt', 'r') as file:
+    with open(current_dir / "ingredients.txt", "r") as file:
         INGREDIENT_CANDIDATES = [line.strip() for line in file.readlines()]
 
-    #Load image classification model
+    # Load image classification model
     from transformers import CLIPProcessor, CLIPModel
+
     clip_model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32")
     clip_processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
 
-    #Load object detection mode 
+    # Load object detection mode
     from transformers import AutoProcessor, AutoModelForZeroShotObjectDetection
+
     device = "cuda" if torch.cuda.is_available() else "cpu"
     dino_processor = AutoProcessor.from_pretrained("IDEA-Research/grounding-dino-base")
-    dino_model = AutoModelForZeroShotObjectDetection.from_pretrained("IDEA-Research/grounding-dino-base").to(device)
+    dino_model = AutoModelForZeroShotObjectDetection.from_pretrained(
+        "IDEA-Research/grounding-dino-base"
+    ).to(device)
+
 
 def detect_ingredients(image_bytes):
     """
@@ -99,37 +110,69 @@ def detect_ingredients(image_bytes):
         (list): List of ingrediants
     """
     if USE_AWS:
-        #Get response from deployed model
-        response = clip_predictor.predict({
-            "inputs": {
-                "image": list(image_bytes),
-                "candidate_labels": INGREDIENT_CANDIDATES
+        # Get response from deployed model
+        response = clip_predictor.predict(
+            {
+                "inputs": {
+                    "image": list(image_bytes),
+                    "candidate_labels": INGREDIENT_CANDIDATES,
+                }
             }
-        })
+        )
         scores = [r["score"] for r in response[0]]
 
-        #Compute mean and std
+        # Compute mean and std
         probs_tensor = torch.tensor(scores)
         mean = probs_tensor.mean()
         std = probs_tensor.std()
 
     else:
-        #Get response from local model
+        # Get response from local model
         image = Image.open(BytesIO(image_bytes)).convert("RGB")
-        inputs = clip_processor(text=INGREDIENT_CANDIDATES, images=image, return_tensors="pt", padding=True)
+        inputs = clip_processor(
+            text=INGREDIENT_CANDIDATES, images=image, return_tensors="pt", padding=True
+        )
         with torch.no_grad():
             outputs = clip_model(**inputs)
             logits_per_image = outputs.logits_per_image
             probs = logits_per_image.softmax(dim=1)
 
-        #Compute mean and std
+        # Compute mean and std
         mean = probs[0].mean()
         std = probs[0].std()
 
-    #Use z-score to retrieve ingredients
-    z_threshold = 0.8
-    detected = [INGREDIENT_CANDIDATES[i] for i, p in enumerate(probs[0]) if p > mean + z_threshold*std]
+    # Use z-score to retrieve ingredients with higher threshold for more precision
+    z_threshold = 2.0  # Increased from 0.8 to be more selective
+    threshold_value = mean + z_threshold * std
+
+    print(f"📊 CLIP Detection Stats:")
+    print(f"   Mean probability: {mean:.6f}")
+    print(f"   Std deviation: {std:.6f}")
+    print(f"   Z-threshold: {z_threshold}")
+    print(f"   Min probability cutoff: {threshold_value:.6f}")
+
+    detected = [
+        INGREDIENT_CANDIDATES[i] for i, p in enumerate(probs[0]) if p > threshold_value
+    ]
+    print(f"   Ingredients passing threshold: {len(detected)}")
+
+    # If still too many ingredients, take only the top 10 by probability
+    if len(detected) > 10:
+        # Get ingredient-probability pairs
+        detected_with_probs = [
+            (INGREDIENT_CANDIDATES[i], probs[0][i].item())
+            for i in range(len(INGREDIENT_CANDIDATES))
+            if INGREDIENT_CANDIDATES[i] in detected
+        ]
+        # Sort by probability descending and take top 10
+        detected_with_probs.sort(key=lambda x: x[1], reverse=True)
+        detected = [ing for ing, _ in detected_with_probs[:10]]
+        print(
+            f"🔍 Filtered to top 10 ingredients from {len(detected_with_probs)} candidates"
+        )
+
     return detected
+
 
 def get_nutrition(ingredient_name):
     """
@@ -140,17 +183,41 @@ def get_nutrition(ingredient_name):
         (dict): Dictionary of nutrition information with the following keys:
             calorie, fat, protein, carb
     """
-    params = {"query": ingredient_name, "pageSize": 1, "api_key": USDA_API_KEY}
+    # Check if API key is set
+    if not USDA_API_KEY:
+        print(
+            f"⚠️  USDA_API_KEY not set! Cannot fetch nutrition for '{ingredient_name}'"
+        )
+        return None
+
+    # Clean up ingredient name for better USDA matching
+    # Replace hyphens with spaces, handle compound names
+    clean_name = ingredient_name.replace("-", " ").replace("_", " ")
+
+    params = {"query": clean_name, "pageSize": 5, "api_key": USDA_API_KEY}
     try:
-        #Send request to USDA's API
-        res = requests.get(USDA_API_URL, params=params)
+        # Send request to USDA's API
+        print(f"🔍 USDA lookup for '{ingredient_name}' (query: '{clean_name}')")
+        res = requests.get(USDA_API_URL, params=params, timeout=5)
         data = res.json()
-        if "foods" not in data or len(data["foods"]) == 0:
+
+        # Check for API errors
+        if "error" in data:
+            print(f"❌ USDA API error for '{ingredient_name}': {data['error']}")
             return None
 
-        #Extract required nutrition data
+        if "foods" not in data or len(data["foods"]) == 0:
+            print(
+                f"❌ USDA: No results for '{ingredient_name}' (searched: '{clean_name}')"
+            )
+            return None
+
+        # Extract required nutrition data
         food = data["foods"][0]
-        nutrients = {n["nutrientName"]: n["value"] for n in food.get("foodNutrients", [])}
+        print(f"✅ USDA found: {food.get('description', 'N/A')}")
+        nutrients = {
+            n["nutrientName"]: n["value"] for n in food.get("foodNutrients", [])
+        }
 
         calorie = nutrients.get("Energy", nutrients.get("Energy (kcal)", 0))
         fat = nutrients.get("Total lipid (fat)", 0)
@@ -161,12 +228,16 @@ def get_nutrition(ingredient_name):
             "calorie": round(calorie, 1),
             "fat": round(fat, 1),
             "protein": round(protein, 1),
-            "carb": round(carb, 1)
+            "carb": round(carb, 1),
         }
 
     except Exception as e:
-        print(f"Error getting nutrition for {ingredient_name}: {e}")
+        print(f"❌ Exception getting nutrition for '{ingredient_name}': {e}")
+        import traceback
+
+        traceback.print_exc()
         return None
+
 
 def get_average_weight(ingredient_name):
     """
@@ -175,10 +246,10 @@ def get_average_weight(ingredient_name):
     """
     params = {
         "query": ingredient_name,
-        "pageSize": 10, 
+        "pageSize": 10,
         "requireAllWords": False,
         "sortBy": "score",
-        "api_key": USDA_API_KEY
+        "api_key": USDA_API_KEY,
     }
 
     try:
@@ -188,14 +259,16 @@ def get_average_weight(ingredient_name):
         if not foods:
             return None
 
-        #Loop through all results until one has servingSize
+        # Loop through all results until one has servingSize
         for food in foods:
             serving_weight = food.get("servingSize")
             if serving_weight:
-                print(f"Found serving size for '{ingredient_name}': ({serving_weight}g)")
+                print(
+                    f"Found serving size for '{ingredient_name}': ({serving_weight}g)"
+                )
                 return serving_weight
 
-        #If none had servingSize, log and return None
+        # If none had servingSize, log and return None
         print(f"No serving size info for '{ingredient_name}'")
         return None
 
@@ -203,7 +276,9 @@ def get_average_weight(ingredient_name):
         print(f"USDA lookup failed for {ingredient_name}: {e}")
         return None
 
+
 USDA_WEIGHT_CACHE = {}
+
 
 def estimate_weights(image_path, detected_ingredients):
     """
@@ -219,23 +294,25 @@ def estimate_weights(image_path, detected_ingredients):
     """
     image = Image.open(image_path).convert("RGB")
 
-    #Create text prompt from detected ingredients
+    # Create text prompt from detected ingredients
     text_prompt = ". ".join([ing.lower() for ing in detected_ingredients]) + "."
 
-    #Run object detection model
+    # Run object detection model
     if USE_AWS:
         with open(image_path, "rb") as f:
             image_bytes = f.read()
-        response = dino_predictor.predict({
-            "inputs": {"image": list(image_bytes), "text": text_prompt}
-        })
+        response = dino_predictor.predict(
+            {"inputs": {"image": list(image_bytes), "text": text_prompt}}
+        )
         res = response[0]
         boxes = torch.tensor(res["boxes"])
         scores = torch.tensor(res["scores"])
         labels = res["labels"]
         results = [{"boxes": boxes, "scores": scores, "text_labels": labels}]
     else:
-        inputs = dino_processor(images=image, text=text_prompt, return_tensors="pt").to(device)
+        inputs = dino_processor(images=image, text=text_prompt, return_tensors="pt").to(
+            device
+        )
         with torch.no_grad():
             outputs = dino_model(**inputs)
         results = dino_processor.post_process_grounded_object_detection(
@@ -246,14 +323,14 @@ def estimate_weights(image_path, detected_ingredients):
             target_sizes=[image.size[::-1]],
         )
 
-    #Parse model results
+    # Parse model results
     detected_objects = {}
     res = results[0]
     boxes = res["boxes"]
     labels = res["text_labels"]
     width, height = image.width, image.height
 
-    #Get area of each ingredient
+    # Get area of each ingredient
     for i, label in enumerate(labels):
         label = label.lower()
         box = boxes[i]
@@ -267,7 +344,7 @@ def estimate_weights(image_path, detected_ingredients):
     weights = {}
     usda_weights = {}
 
-    #Cache USDA serving weights
+    # Cache USDA serving weights
     for ingredient in detected_ingredients:
         key = ingredient.lower()
         if key in USDA_WEIGHT_CACHE:
@@ -277,24 +354,24 @@ def estimate_weights(image_path, detected_ingredients):
             USDA_WEIGHT_CACHE[key] = w
         usda_weights[ingredient] = w
 
-    #Map model provided labels to ingredients 
+    # Map model provided labels to ingredients
     label_to_ings = {}
     for label, frac in detected_objects.items():
         matched = [ing for ing in detected_ingredients if ing.lower() in label]
         if matched:
             label_to_ings[label] = matched
 
-    #Compute per-ingredient area fractions
+    # Compute per-ingredient area fractions
     ingredient_area = {ing: 0.0 for ing in detected_ingredients}
     for label, matched_ings in label_to_ings.items():
         frac = detected_objects[label]
         if len(matched_ings) == 1:
             ingredient_area[matched_ings[0]] += frac
         else:
-            #Use USDA weights to estimate average portion sizes 
+            # Use USDA weights to estimate average portion sizes
             weights_for_label = [usda_weights[ing] or 0 for ing in matched_ings]
             total_w = sum(weights_for_label)
-            if total_w == 0: #USDA doesn't have any of the detected ingredients 
+            if total_w == 0:  # USDA doesn't have any of the detected ingredients
                 share = frac / len(matched_ings)
                 for ing in matched_ings:
                     ingredient_area[ing] += share
@@ -305,26 +382,34 @@ def estimate_weights(image_path, detected_ingredients):
     matched_ings = [ing for ing, a in ingredient_area.items() if a > 0]
     unmatched_ings = [ing for ing in detected_ingredients if ing not in matched_ings]
 
-    #Normalize fractions for all ingredients  allocate scaled weights
+    # Normalize fractions for all ingredients  allocate scaled weights
     total_matched_area = sum(ingredient_area[ing] for ing in matched_ings)
     if matched_ings and total_matched_area > 0:
-        normalized = {ing: ingredient_area[ing] / total_matched_area for ing in matched_ings}
-        valid_usda_weights = [usda_weights[ing] for ing in matched_ings if usda_weights[ing] is not None]
-        total_expected_weight_matched = sum(valid_usda_weights) if valid_usda_weights else None
+        normalized = {
+            ing: ingredient_area[ing] / total_matched_area for ing in matched_ings
+        }
+        valid_usda_weights = [
+            usda_weights[ing] for ing in matched_ings if usda_weights[ing] is not None
+        ]
+        total_expected_weight_matched = (
+            sum(valid_usda_weights) if valid_usda_weights else None
+        )
 
-        #Calculate final weight based on normalized area and average portion
+        # Calculate final weight based on normalized area and average portion
         for ing in matched_ings:
             if total_expected_weight_matched is not None:
                 weight = normalized[ing] * total_expected_weight_matched
                 weights[ing] = round(weight, 1)
-                print(f"Calculated weight for {ing}: {weight:.1f}g (scaled; normalized fraction {normalized[ing]:.3f})")
+                print(
+                    f"Calculated weight for {ing}: {weight:.1f}g (scaled; normalized fraction {normalized[ing]:.3f})"
+                )
             else:
                 weights[ing] = None
     else:
         for ing in detected_ingredients:
             weights[ing] = usda_weights[ing]
 
-    #Fallback for unmatched ingredients
+    # Fallback for unmatched ingredients
     for ing in unmatched_ings:
         weights[ing] = usda_weights[ing]
         if weights[ing] is None:
@@ -334,11 +419,13 @@ def estimate_weights(image_path, detected_ingredients):
 
     return weights
 
+
 import math
+
 
 def to_python_number(value):
     """Convert numpy numbers → Python float. Replace NaN/inf with None."""
-  
+
     if hasattr(value, "item"):
         value = value.item()
 
@@ -346,6 +433,7 @@ def to_python_number(value):
         return None
 
     return value
+
 
 def process_image(image_path):
     """
@@ -357,28 +445,26 @@ def process_image(image_path):
     """
     with open(image_path, "rb") as f:
         image_bytes = f.read()
-    #Find ingredients
+    # Find ingredients
     detected = detect_ingredients(image_bytes)
     print(f"Detected ingredients: {detected}")
 
-    #Find their weights
+    # Find their weights
     weights = estimate_weights(image_path, detected)
     print(f"Estimated weights: {weights}")
 
-    #Structure output
+    # Structure output
     results = {}
 
     for ingredient in detected:
         nutrition = get_nutrition(ingredient)
 
-        # If USDA gives nothing, skip
+        # If USDA gives nothing, use default values
         if not nutrition:
-            continue
+            print(f"⚠️  No USDA nutrition data found for '{ingredient}', using defaults")
+            nutrition = {"calorie": 0, "fat": 0, "protein": 0, "carb": 0}
 
-
-        cleaned_nutrition = {
-            k: to_python_number(v) for k, v in nutrition.items()
-        }
+        cleaned_nutrition = {k: to_python_number(v) for k, v in nutrition.items()}
 
         cleaned_nutrition["weight"] = to_python_number(weights.get(ingredient))
 
@@ -386,7 +472,8 @@ def process_image(image_path):
 
     return results
 
-#Test model
+
+# Test model
 if __name__ == "__main__":
     image_paths = ["pizza.jpeg", "burger.jpeg", "fish_chips.jpg", "bowl.jpg"]
     for image_path in image_paths:

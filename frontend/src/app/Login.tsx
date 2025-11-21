@@ -12,12 +12,14 @@ interface LoginProps {
 }
 
 export default function Login({ onNavigateToSignUp, onLoginSuccess, onForgotPassword }: LoginProps) {
-  const { setEmail } = useUser();  
+  const { setEmail } = useUser();
 
   const [email, setEmailInput] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [show2FA, setShow2FA] = useState(false);
+  const [code, setCode] = useState('');
 
   const handleLogin = async () => {
     if (!email || !password) {
@@ -27,7 +29,11 @@ export default function Login({ onNavigateToSignUp, onLoginSuccess, onForgotPass
 
     setLoading(true);
     try {
-      const response = await fetch(`${getServerUrl()}/login`, {
+      const url = `${getServerUrl()}/login`;
+      console.log('🔵 Attempting login to:', url);
+      console.log('🔵 Request body:', { email, password: '***' });
+
+      const response = await fetch(url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -35,22 +41,106 @@ export default function Login({ onNavigateToSignUp, onLoginSuccess, onForgotPass
         body: JSON.stringify({ email, password }),
       });
 
+      console.log('🔵 Response status:', response.status);
       const data = await response.json();
+      console.log('🔵 Response data:', data);
 
       if (response.ok && data.success) {
-          setEmail(email); 
-        if (onLoginSuccess) {
-          return;
-        }
+        // Show 2FA verification screen
+        console.log('🔵 2FA initiated, showing verification screen');
+        setShow2FA(true);
       } else {
         Alert.alert('Error', data.message || 'Invalid credentials');
       }
     } catch (error) {
-      Alert.alert('Error', 'Network error. Please try again.');
+      console.error('🔴 Login error:', error);
+      const err = error as Error;
+      Alert.alert('Error', `Network error: ${err.message || 'Please try again'}`);
     } finally {
       setLoading(false);
     }
   };
+
+  const handleVerify2FA = async () => {
+    if (!code || code.length !== 6) {
+      Alert.alert('Error', 'Please enter the 6-digit code');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const url = `${getServerUrl()}/authenticate`;
+      console.log('🔵 Verifying 2FA code:', url);
+
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email, verification_code: parseInt(code) }),
+      });
+
+      const data = await response.json();
+      console.log('🔵 2FA verification response:', data);
+
+      if (response.ok && data.success) {
+        setEmail(email);
+        Alert.alert('Success', 'Login successful!');
+        if (onLoginSuccess) {
+          onLoginSuccess(email);
+        }
+      } else {
+        Alert.alert('Error', data.message || 'Invalid code');
+      }
+    } catch (error) {
+      console.error('🔴 2FA verification error:', error);
+      const err = error as Error;
+      Alert.alert('Error', `Network error: ${err.message || 'Please try again'}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Show 2FA screen if 2FA is initiated
+  if (show2FA) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <View style={styles.container}>
+          <View style={styles.logoContainer}>
+            <View style={styles.logoCircle}>
+              <Ionicons name="shield-checkmark" size={40} color="#4CAF50" />
+            </View>
+            <Text style={styles.logoText}>Enter 2FA Code</Text>
+            <Text style={styles.logoSubtext}>Check your email for the code</Text>
+          </View>
+
+          <TextInput
+            style={styles.input}
+            placeholder="6-Digit Code"
+            value={code}
+            onChangeText={setCode}
+            keyboardType="number-pad"
+            maxLength={6}
+            autoCapitalize="none"
+          />
+
+          <TouchableOpacity
+            style={[styles.button, loading && styles.buttonDisabled]}
+            onPress={handleVerify2FA}
+            disabled={loading}
+          >
+            <Text style={styles.buttonText}>
+              {loading ? 'Verifying...' : 'Verify'}
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity onPress={() => setShow2FA(false)} style={styles.forgotPassword}>
+            <Text style={styles.forgotPasswordText}>Back to login</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.safeArea}>

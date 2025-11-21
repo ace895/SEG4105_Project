@@ -1,20 +1,30 @@
-import { View, ScrollView, StyleSheet, Text, Image, TouchableOpacity } from "react-native";
+import { View, ScrollView, StyleSheet, Text, Image, TouchableOpacity, Alert } from "react-native";
 import { useLocalSearchParams } from "expo-router";
 import IngredientCard, { Ingredient } from "../../components/IngredientCard";
 import { router } from "expo-router";
+import { useState } from "react";
+import IngredientEditModal from "../../components/EditIngredientModal";
+import { useUser } from "../../context/UserContext";
+import { getServerUrl } from "../../utils/api";
 
 
 export default function MealDetailsPage() {
-  const { ingredients, imageUri, name, date } = useLocalSearchParams();
+  const { ingredients, imageUri, name, date, mealId } = useLocalSearchParams();
+  const { email: userEmail } = useUser();
 
   const imgUri = Array.isArray(imageUri) ? imageUri[0] : imageUri;
 
-  let ingredientList: Ingredient[] = [];
+  let initialIngredients: Ingredient[] = [];
   try {
     if (typeof ingredients === "string") {
-      ingredientList = JSON.parse(ingredients);
+      initialIngredients = JSON.parse(ingredients);
     }
-  } catch {}
+  } catch { }
+
+  const [ingredientList, setIngredientList] = useState<Ingredient[]>(initialIngredients);
+  const [editingIngredient, setEditingIngredient] = useState<Ingredient | null>(null);
+  const [editVisible, setEditVisible] = useState(false);
+  const [hasChanges, setHasChanges] = useState(false);
 
   // Totals
   const totalCalories = ingredientList.reduce((s, i) => s + i.calories, 0);
@@ -23,17 +33,59 @@ export default function MealDetailsPage() {
   const totalFats = ingredientList.reduce((s, i) => s + i.fats, 0);
   const totalCarbs = ingredientList.reduce((s, i) => s + i.carbs, 0);
 
-  return (
-    <ScrollView contentContainerStyle={styles.container}>      
-          <TouchableOpacity
-      style={styles.backButton}
-      onPress={() =>
-        router.push({pathname: "/dashboard",
-        })
+  const handleSaveChanges = async () => {
+    if (!userEmail || !mealId) {
+      Alert.alert("Error", "Missing user information");
+      return;
+    }
+
+    const ingredientObject: any = {};
+    ingredientList.forEach((i) => {
+      ingredientObject[i.name] = {
+        calorie: i.calories,
+        protein: i.proteins,
+        fat: i.fats,
+        carb: i.carbs,
+        weight: i.weight,
+      };
+    });
+
+    try {
+      const res = await fetch(`${getServerUrl()}/update-meal`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          meal_id: mealId,
+          email: userEmail,
+          ingredients: ingredientObject,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (res.ok && data.success) {
+        Alert.alert("Success", "Meal updated!");
+        setHasChanges(false);
+      } else {
+        Alert.alert("Error", "Failed to update meal.");
       }
-    >
-      <Text style={styles.backButtonText}>Back to Dashboard</Text>
-    </TouchableOpacity>
+    } catch (err) {
+      Alert.alert("Error", "Network error.");
+    }
+  };
+
+  return (
+    <ScrollView contentContainerStyle={styles.container}>
+      <TouchableOpacity
+        style={styles.backButton}
+        onPress={() =>
+          router.push({
+            pathname: "/dashboard",
+          })
+        }
+      >
+        <Text style={styles.backButtonText}>Back to Dashboard</Text>
+      </TouchableOpacity>
 
 
       {imgUri ? (
@@ -47,7 +99,14 @@ export default function MealDetailsPage() {
       <Text style={styles.title}>{name}</Text>
 
       {ingredientList.map((item, index) => (
-        <IngredientCard key={index} ingredient={item} onEdit={() => {}} />
+        <IngredientCard
+          key={index}
+          ingredient={item}
+          onEdit={() => {
+            setEditingIngredient(item);
+            setEditVisible(true);
+          }}
+        />
       ))}
 
       <View style={styles.summary}>
@@ -58,6 +117,26 @@ export default function MealDetailsPage() {
         <Text>{totalFats}g fats</Text>
         <Text>{totalCarbs}g carbs</Text>
       </View>
+
+      {hasChanges && (
+        <TouchableOpacity style={styles.saveButton} onPress={handleSaveChanges}>
+          <Text style={styles.saveButtonText}>Save Changes</Text>
+        </TouchableOpacity>
+      )}
+
+      {editingIngredient && (
+        <IngredientEditModal
+          visible={editVisible}
+          ingredient={editingIngredient}
+          onClose={() => setEditVisible(false)}
+          onSave={(updated) => {
+            setIngredientList((prev) =>
+              prev.map((i) => (i.name === editingIngredient.name ? updated : i))
+            );
+            setHasChanges(true);
+          }}
+        />
+      )}
     </ScrollView>
   );
 }
@@ -88,11 +167,23 @@ const styles = StyleSheet.create({
   },
   summaryTitle: { fontSize: 18, fontWeight: "700", marginBottom: 8 },
 
-   backButton: {
+  backButton: {
     marginBottom: 15,
   },
   backButtonText: {
     color: "#3B82F6",
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  saveButton: {
+    backgroundColor: "#4CAF50",
+    padding: 15,
+    borderRadius: 10,
+    alignItems: "center",
+    marginTop: 20,
+  },
+  saveButtonText: {
+    color: "#fff",
     fontSize: 16,
     fontWeight: "600",
   },

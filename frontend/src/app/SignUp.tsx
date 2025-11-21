@@ -28,7 +28,11 @@ export default function SignUp({ onNavigateToLogin, onSignUpSuccess }: SignUpPro
 
     setLoading(true);
     try {
-      const response = await fetch(`${getServerUrl()}/signup`, {
+      const url = `${getServerUrl()}/signup`;
+      console.log('🔵 Attempting signup to:', url);
+      console.log('🔵 Request body:', { email, password: '***' });
+
+      const response = await fetch(url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -36,7 +40,9 @@ export default function SignUp({ onNavigateToLogin, onSignUpSuccess }: SignUpPro
         body: JSON.stringify({ email, password }),
       });
 
+      console.log('🔵 Response status:', response.status);
       const data = await response.json();
+      console.log('🔵 Response data:', data);
 
       if (response.ok && data.success) {
         Alert.alert('Success', 'Account created successfully!');
@@ -47,7 +53,8 @@ export default function SignUp({ onNavigateToLogin, onSignUpSuccess }: SignUpPro
         Alert.alert('Error', data.message || 'Failed to create account');
       }
     } catch (error) {
-      Alert.alert('Error', 'Network error. Please try again.');
+      console.error('🔴 Signup error:', error);
+      Alert.alert('Error', `Network error: ${error.message || 'Please try again'}`);
     } finally {
       setLoading(false);
     }

@@ -1,6 +1,7 @@
 from app.db.db import get_db_connection
 from datetime import datetime
 
+
 def add_meal(data):
     """
     Adds a new meal and its ingredients for a user.
@@ -28,33 +29,41 @@ def add_meal(data):
         email = data.get("email")
         iso_time = data.get("time")
         ingredients = data.get("ingredients", {})
+        image_url = data.get("image_url")  # Get image URL if provided
 
-        #Parse ISO timestamp
+        # Parse ISO timestamp
         dt = datetime.fromisoformat(iso_time.replace("Z", "+00:00"))
         meal_date = dt.date().isoformat()
         meal_time = dt.time().strftime("%H:%M")
 
-        #Insert meal entry
-        cursor.execute("""
-            INSERT INTO meals (user_email, meal_date, meal_time)
-            VALUES (?, ?, ?)
-        """, (email, meal_date, meal_time))
-        meal_id = cursor.lastrowid
+        # Insert meal entry with image URL
+        cursor.execute(
+            """
+            INSERT INTO meals (user_email, meal_date, meal_time, image_url)
+            VALUES (%s, %s, %s, %s)
+            RETURNING meal_id
+        """,
+            (email, meal_date, meal_time, image_url),
+        )
+        meal_id = cursor.fetchone()["meal_id"]
 
-        #Insert each ingredient
+        # Insert each ingredient
         for name, info in ingredients.items():
-            cursor.execute("""
+            cursor.execute(
+                """
                 INSERT INTO ingredient_items (meal_id, ingredient_name, calorie, protein, fat, carb, weight)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-            """, (
-                meal_id,
-                name,
-                info.get("calorie"),
-                info.get("protein"),
-                info.get("fat"),
-                info.get("carb"),
-                info.get("weight")
-            ))
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
+            """,
+                (
+                    meal_id,
+                    name,
+                    info.get("calorie"),
+                    info.get("protein"),
+                    info.get("fat"),
+                    info.get("carb"),
+                    info.get("weight"),
+                ),
+            )
 
         conn.commit()
         conn.close()
@@ -63,6 +72,7 @@ def add_meal(data):
     except Exception as e:
         print(f"[ERROR] add_meal: {e}")
         return False
+
 
 def edit_meal(data):
     """
@@ -91,35 +101,41 @@ def edit_meal(data):
         time = data.get("time")
         ingredients = data.get("ingredients", {})
 
-        #Find the meal entry by user, date, and time
-        cursor.execute("""
+        # Find the meal entry by user, date, and time
+        cursor.execute(
+            """
             SELECT meal_id FROM meals
-            WHERE user_email = ? AND meal_date = ? AND meal_time = ?
-        """, (email, date, time))
+            WHERE user_email = %s AND meal_date = %s AND meal_time = %s
+        """,
+            (email, date, time),
+        )
         row = cursor.fetchone()
         if not row:
             conn.close()
             return False
 
-        meal_id = row[0]
+        meal_id = row["meal_id"]
 
-        #Delete existing ingredients for this meal
-        cursor.execute("DELETE FROM ingredient_items WHERE meal_id = ?", (meal_id,))
+        # Delete existing ingredients for this meal
+        cursor.execute("DELETE FROM ingredient_items WHERE meal_id = %s", (meal_id,))
 
-        #Insert updated ingredients
+        # Insert updated ingredients
         for name, info in ingredients.items():
-            cursor.execute("""
+            cursor.execute(
+                """
                 INSERT INTO ingredient_items (meal_id, ingredient_name, calorie, protein, fat, carb, weight)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-            """, (
-                meal_id,
-                name,
-                info.get("calorie"),
-                info.get("protein"),
-                info.get("fat"),
-                info.get("carb"),
-                info.get("weight")
-            ))
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
+            """,
+                (
+                    meal_id,
+                    name,
+                    info.get("calorie"),
+                    info.get("protein"),
+                    info.get("fat"),
+                    info.get("carb"),
+                    info.get("weight"),
+                ),
+            )
 
         conn.commit()
         conn.close()
@@ -128,7 +144,8 @@ def edit_meal(data):
     except Exception as e:
         print(f"[ERROR] edit_meal: {e}")
         return False
-    
+
+
 def get_meals(email, date):
     """
     Retrieves all meals and their ingredients for a given user on a specific date.
@@ -154,38 +171,54 @@ def get_meals(email, date):
     conn = get_db_connection()
     cursor = conn.cursor()
 
-    #Get all meals for the user on the specified date
-    cursor.execute("""
-        SELECT meal_id, meal_time
+    # Get all meals for the user on the specified date
+    cursor.execute(
+        """
+        SELECT meal_id, meal_time, image_url
         FROM meals
-        WHERE user_email = ? AND meal_date = ?
+        WHERE user_email = %s AND meal_date = %s
         ORDER BY meal_time
-    """, (email, date))
+    """,
+        (email, date),
+    )
 
     meals = cursor.fetchall()
     result = {}
 
-    for meal_id, meal_time in meals:
-        #Get ingredients for this meal
-        cursor.execute("""
+    for meal in meals:
+        meal_id = meal["meal_id"]
+        meal_time = str(meal["meal_time"])  # Convert time object to string
+        image_url = meal["image_url"]  # Get image URL
+
+        # Get ingredients for this meal
+        cursor.execute(
+            """
             SELECT ingredient_name, calorie, protein, fat, carb, weight
             FROM ingredient_items
-            WHERE meal_id = ?
-        """, (meal_id,))
+            WHERE meal_id = %s
+        """,
+            (meal_id,),
+        )
 
         ingredients = cursor.fetchall()
         result[meal_time] = {
-            name: {
-                "calorie": calorie,
-                "protein": protein,
-                "fat": fat,
-                "carb": carb,
-                "weight": weight
-            } for name, calorie, protein, fat, carb, weight in ingredients
+            "meal_id": meal_id,  # Include meal_id for updates
+            "image_url": image_url,  # Include image URL in response
+            **{
+                ing["ingredient_name"]: {
+                    "calorie": ing["calorie"],
+                    "protein": ing["protein"],
+                    "fat": ing["fat"],
+                    "carb": ing["carb"],
+                    "weight": ing["weight"],
+                }
+                for ing in ingredients
+            },
         }
 
     conn.close()
     return result
+
 
 def get_meal_history(email, start_date=None, end_date=None):
     """
@@ -213,15 +246,15 @@ def get_meal_history(email, start_date=None, end_date=None):
     conn = get_db_connection()
     cursor = conn.cursor()
 
-    #Build base query
-    query = "SELECT meal_id, meal_date, meal_time FROM meals WHERE user_email = ?"
+    # Build base query
+    query = "SELECT meal_id, meal_date, meal_time FROM meals WHERE user_email = %s"
     params = [email]
 
     if start_date:
-        query += " AND meal_date >= ?"
+        query += " AND meal_date >= %s"
         params.append(start_date)
     if end_date:
-        query += " AND meal_date <= ?"
+        query += " AND meal_date <= %s"
         params.append(end_date)
 
     query += " ORDER BY meal_date, meal_time"
@@ -231,23 +264,31 @@ def get_meal_history(email, start_date=None, end_date=None):
 
     history = {}
 
-    for meal_id, meal_date, meal_time in meals:
-        #Fetch ingredients for this meal
-        cursor.execute("""
+    for meal in meals:
+        meal_id = meal["meal_id"]
+        meal_date = str(meal["meal_date"])
+        meal_time = str(meal["meal_time"])
+
+        # Fetch ingredients for this meal
+        cursor.execute(
+            """
             SELECT ingredient_name, calorie, protein, fat, carb, weight
             FROM ingredient_items
-            WHERE meal_id = ?
-        """, (meal_id,))
+            WHERE meal_id = %s
+        """,
+            (meal_id,),
+        )
         ingredients = cursor.fetchall()
 
         meal_data = {
-            name: {
-                "calorie": calorie,
-                "protein": protein,
-                "fat": fat,
-                "carb": carb,
-                "weight": weight
-            } for name, calorie, protein, fat, carb, weight in ingredients
+            ing["ingredient_name"]: {
+                "calorie": ing["calorie"],
+                "protein": ing["protein"],
+                "fat": ing["fat"],
+                "carb": ing["carb"],
+                "weight": ing["weight"],
+            }
+            for ing in ingredients
         }
 
         if meal_date not in history:
@@ -256,3 +297,60 @@ def get_meal_history(email, start_date=None, end_date=None):
 
     conn.close()
     return history
+
+
+def update_meal(meal_id, email, ingredients):
+    """
+    Updates an existing meal's ingredients.
+
+    Args:
+        meal_id (int): The meal ID to update
+        email (str): User's email for verification
+        ingredients (dict): Dictionary of ingredients with their nutritional info
+
+    Returns:
+        bool: True if successful, False otherwise
+    """
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    try:
+        # Verify the meal belongs to this user
+        cursor.execute("SELECT user_email FROM meals WHERE meal_id = %s", (meal_id,))
+        result = cursor.fetchone()
+
+        if not result or result["user_email"] != email:
+            conn.close()
+            return False
+
+        # Delete existing ingredients
+        cursor.execute("DELETE FROM ingredient_items WHERE meal_id = %s", (meal_id,))
+
+        # Insert updated ingredients
+        for name, info in ingredients.items():
+            cursor.execute(
+                """
+                INSERT INTO ingredient_items 
+                (meal_id, ingredient_name, calorie, protein, fat, carb, weight)
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
+            """,
+                (
+                    meal_id,
+                    name,
+                    info["calorie"],
+                    info["protein"],
+                    info["fat"],
+                    info["carb"],
+                    info["weight"],
+                ),
+            )
+
+        conn.commit()
+        conn.close()
+        return True
+
+    except Exception as e:
+        conn.rollback()
+        conn.close()
+        print(f"Error updating meal: {e}")
+        return False

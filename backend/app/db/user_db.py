@@ -2,6 +2,7 @@ import hashlib
 
 from app.db.db import get_db_connection
 
+
 def signup(email, password):
     """
     Registers a new user if they do not already exist.
@@ -16,27 +17,28 @@ def signup(email, password):
     conn = get_db_connection()
     cursor = conn.cursor()
 
-    #Check if user already exists
-    cursor.execute("SELECT 1 FROM users WHERE email = ?", (email,))
+    # Check if user already exists
+    cursor.execute("SELECT 1 FROM users WHERE email = %s", (email,))
     if cursor.fetchone():
         conn.close()
         return False
 
-    #Hash password before saving
+    # Hash password before saving
     hashed_pw = hashlib.sha256(password.encode()).hexdigest()
 
-    #Insert new user
+    # Insert new user
     cursor.execute(
         """
         INSERT INTO users (email, password, name, height, weight, goal, age, allergies, notifications_on)
-        VALUES (?, ?, '', NULL, NULL, NULL, NULL, NULL, 1)
+        VALUES (%s, %s, '', NULL, NULL, NULL, NULL, NULL, TRUE)
         """,
-        (email, hashed_pw)
+        (email, hashed_pw),
     )
 
     conn.commit()
     conn.close()
     return True
+
 
 def login(email, password):
     """
@@ -49,19 +51,23 @@ def login(email, password):
     Returns:
         bool: True if credentials are valid, False otherwise.
     """
+    if not email or not password:
+        return False
+
     conn = get_db_connection()
     cursor = conn.cursor()
 
     hashed_pw = hashlib.sha256(password.encode()).hexdigest()
 
-    cursor.execute("SELECT password FROM users WHERE email = ?", (email,))
+    cursor.execute("SELECT password FROM users WHERE email = %s", (email,))
     row = cursor.fetchone()
 
     conn.close()
 
-    if row and row[0] == hashed_pw:
+    if row and row["password"] == hashed_pw:
         return True
     return False
+
 
 def get_profile(email):
     """
@@ -77,11 +83,14 @@ def get_profile(email):
     conn = get_db_connection()
     cursor = conn.cursor()
 
-    cursor.execute("""
+    cursor.execute(
+        """
         SELECT name, height, weight, goal, age, allergies, notifications_on
         FROM users
-        WHERE email = ?
-    """, (email,))
+        WHERE email = %s
+    """,
+        (email,),
+    )
 
     row = cursor.fetchone()
     conn.close()
@@ -89,16 +98,17 @@ def get_profile(email):
     if not row:
         return None
 
-    #Convert to dictionary for JSON response
+    # Convert to dictionary for JSON response (row is already a dict with RealDictCursor)
     return {
-        "name": row[0],
-        "height": row[1],
-        "weight": row[2],
-        "goal": row[3],
-        "age": row[4],
-        "allergies": row[5],
-        "notifications_on": bool(row[6])
+        "name": row["name"],
+        "height": row["height"],
+        "weight": row["weight"],
+        "goal": row["goal"],
+        "age": row["age"],
+        "allergies": row["allergies"],
+        "notifications_on": bool(row["notifications_on"]),
     }
+
 
 def toggle_notifications(email):
     """
@@ -114,18 +124,21 @@ def toggle_notifications(email):
         conn = get_db_connection()
         cursor = conn.cursor()
 
-        #Get current value
-        cursor.execute("SELECT notifications_on FROM users WHERE email = ?", (email,))
+        # Get current value
+        cursor.execute("SELECT notifications_on FROM users WHERE email = %s", (email,))
         row = cursor.fetchone()
         if not row:
             conn.close()
             return False
 
-        current = row[0]
-        #Toggle the boolean value
-        new_value = 0 if current else 1
+        current = row["notifications_on"]
+        # Toggle the boolean value
+        new_value = not current
 
-        cursor.execute("UPDATE users SET notifications_on = ? WHERE email = ?", (new_value, email))
+        cursor.execute(
+            "UPDATE users SET notifications_on = %s WHERE email = %s",
+            (new_value, email),
+        )
         conn.commit()
         conn.close()
         return True
@@ -133,7 +146,8 @@ def toggle_notifications(email):
     except Exception as e:
         print(f"[ERROR] toggle_notifications: {e}")
         return False
-    
+
+
 def edit_dietary_info(data):
     """
     Updates a user's dietary information.
@@ -164,15 +178,17 @@ def edit_dietary_info(data):
 
         for field in ["height", "weight", "age", "allergies"]:
             if field in data:
-                updates.append(f"{field} = ?")
+                updates.append(f"{field} = %s")
                 values.append(data[field])
 
         if not updates:
             conn.close()
-            return False  #Nothing to update
+            return False  # Nothing to update
 
         values.append(email)
-        cursor.execute(f"UPDATE users SET {', '.join(updates)} WHERE email = ?", tuple(values))
+        cursor.execute(
+            f"UPDATE users SET {', '.join(updates)} WHERE email = %s", tuple(values)
+        )
         conn.commit()
         conn.close()
         return True
@@ -180,6 +196,7 @@ def edit_dietary_info(data):
     except Exception as e:
         print(f"[ERROR] edit_dietary_info: {e}")
         return False
+
 
 def edit_goal(email, goal):
     """
@@ -196,7 +213,7 @@ def edit_goal(email, goal):
         conn = get_db_connection()
         cursor = conn.cursor()
 
-        cursor.execute("UPDATE users SET goal = ? WHERE email = ?", (goal, email))
+        cursor.execute("UPDATE users SET goal = %s WHERE email = %s", (goal, email))
         conn.commit()
         conn.close()
         return True
@@ -204,7 +221,8 @@ def edit_goal(email, goal):
     except Exception as e:
         print(f"[ERROR] edit_goal: {e}")
         return False
-    
+
+
 def get_goal(email):
     """
     Retrieves the user's goal from the database.
@@ -218,11 +236,11 @@ def get_goal(email):
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
-        cursor.execute("SELECT goal FROM users WHERE email = ?", (email,))
+        cursor.execute("SELECT goal FROM users WHERE email = %s", (email,))
         row = cursor.fetchone()
         conn.close()
         if row:
-            return row[0]
+            return row["goal"]
         return None
     except Exception as e:
         print(f"[ERROR] get_goal: {e}")

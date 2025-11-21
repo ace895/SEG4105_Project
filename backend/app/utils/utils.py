@@ -4,16 +4,19 @@ import os
 import random
 import smtplib
 from dotenv import load_dotenv
+import boto3
+from botocore.exceptions import ClientError
 
 from app.db.meal_db import get_meals
 from app.db.user_db import get_profile, login as login_db
 
-#Store 2FA codes
+# Store 2FA codes
 codes = {}
 load_dotenv()
 SERVER_URL = "http://127.0.0.1:8080"
 
-def login(email, password): 
+
+def login(email, password):
     """
     Verifies the user's email and password and initiates 2FA
 
@@ -21,29 +24,75 @@ def login(email, password):
         (bool): True if successful, False otherwise
     """
 
-    #Check user credentials
+    # Check user credentials
     if not login_db(email, password):
         return False
 
-    #Generate 2FA code
+    # Generate 2FA code
     code = random.randint(100000, 999999)
     codes[email] = code
 
-    #Send email with code
-    sender = os.getenv("EMAIL")
-    password = os.getenv("EMAIL_PASSWORD")
-    msg = MIMEText(f"Your verification code is: {code}")
-    msg["Subject"] = "2FA Verification Code"
-    msg["From"] = sender
-    msg["To"] = email
+    # Send email with code using AWS SES
+    sender_email = os.getenv("SES_SENDER_EMAIL", "gurjot_grewal@outlook.com")
 
-    with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
-        server.login(sender, password)
-        server.send_message(msg)
+    try:
+        # Initialize AWS SES client
+        ses_client = boto3.client(
+            "ses", region_name=os.getenv("AWS_REGION", "us-east-1")
+        )
 
-    return True
+        # Email content
+        subject = "Your 2FA Verification Code"
+        body_text = (
+            f"Your verification code is: {code}\n\nThis code will expire in 10 minutes."
+        )
+        body_html = f"""
+        <html>
+        <head></head>
+        <body>
+            <h2>GR One - Food Logging App</h2>
+            <p>Your verification code is:</p>
+            <h1 style="color: #4CAF50; font-size: 36px; letter-spacing: 5px;">{code}</h1>
+            <p>This code will expire in 10 minutes.</p>
+            <p>If you didn't request this code, please ignore this email.</p>
+        </body>
+        </html>
+        """
 
-def authenticate(email, code): 
+        # Send email via SES
+        response = ses_client.send_email(
+            Source=sender_email,
+            Destination={"ToAddresses": [email]},
+            Message={
+                "Subject": {"Data": subject, "Charset": "UTF-8"},
+                "Body": {
+                    "Text": {"Data": body_text, "Charset": "UTF-8"},
+                    "Html": {"Data": body_html, "Charset": "UTF-8"},
+                },
+            },
+        )
+
+        print(
+            f"✅ 2FA email sent to {email} via AWS SES (MessageId: {response['MessageId']})"
+        )
+        return True
+
+    except ClientError as e:
+        error_code = e.response["Error"]["Code"]
+        print(
+            f"⚠️  Failed to send 2FA email via SES: {error_code} - {e.response['Error']['Message']}"
+        )
+        print(f"📧 2FA Code for {email}: {code}")
+
+        # Still return True so user can continue, but log the code
+        return True
+    except Exception as e:
+        print(f"⚠️  Unexpected error sending 2FA email: {e}")
+        print(f"📧 2FA Code for {email}: {code}")
+        return True
+
+
+def authenticate(email, code):
     """
     Authenticate user's verification code
 
@@ -55,18 +104,21 @@ def authenticate(email, code):
         return True
     return False
 
-def calculate_nutrition_targets(weight_kg, height_cm, age, goal="weight loss", activity_level=1.55):
+
+def calculate_nutrition_targets(
+    weight_kg, height_cm, age, goal="weight loss", activity_level=1.55
+):
     """
     Calculates recommended daily calories and macronutrients using weight, height, age, and goal.
     Uses the Mifflin-St Jeor equation averaged for male/female to avoid needing sex.
-    
+
     Args:
         weight_kg (float): User weight in kg
         height_cm (float): User height in cm
         age (int): User age in years
         goal (str): "weight loss" or "muscle gain"
         activity_level (float): TDEE multiplier, default 1.55 (moderate activity)
-    
+
     Returns:
         dict: {
             "calorie": int,
@@ -75,15 +127,15 @@ def calculate_nutrition_targets(weight_kg, height_cm, age, goal="weight loss", a
             "carb": float (grams)
         }
     """
-    #Calculate BMR using Mifflin-St Jeor, average for male/female
+    # Calculate BMR using Mifflin-St Jeor, average for male/female
     bmr_male = 10 * weight_kg + 6.25 * height_cm - 5 * age + 5
     bmr_female = 10 * weight_kg + 6.25 * height_cm - 5 * age - 161
     bmr_avg = (bmr_male + bmr_female) / 2
 
-    #Total daily energy expenditure
+    # Total daily energy expenditure
     tdee = bmr_avg * activity_level
 
-    #Adjust calories based on goal
+    # Adjust calories based on goal
     if goal.lower() == "weight loss":
         calories = tdee * 0.8
         protein = weight_kg * 1.6
@@ -94,17 +146,17 @@ def calculate_nutrition_targets(weight_kg, height_cm, age, goal="weight loss", a
         calories = tdee
         protein = weight_kg * 1.5
 
-    #Fat intake: ~27% of calories
+    # Fat intake: ~27% of calories
     fat = (0.27 * calories) / 9
 
-    #Carbs: remaining calories
+    # Carbs: remaining calories
     carb = (calories - (protein * 4 + fat * 9)) / 4
 
     return {
         "calorie": round(calories),
         "protein": round(protein, 1),
         "fat": round(fat, 1),
-        "carb": round(carb, 1)
+        "carb": round(carb, 1),
     }
 
 
@@ -118,20 +170,20 @@ def get_status(email):
     Returns:
         int: -1 = not on track, 0 = on track, 1 = ahead
     """
-    #Get user profile for weight, height, age, and goal
+    # Get user profile for weight, height, age, and goal
     profile = get_profile(email)
     if not profile:
-        return 0  #fallback if no profile
+        return 0  # fallback if no profile
 
     goal = profile.get("goal", "").lower()
     weight = profile.get("weight")
     height = profile.get("height")
     age = profile.get("age")
 
-    #Today's meals
+    # Today's meals
     today_meals = get_meals(email, date.today().isoformat())
 
-    #Sum totals for today
+    # Sum totals for today
     total_calorie = total_protein = total_fat = total_carb = 0
     for meal_time, ingredients in today_meals.items():
         for ing_name, info in ingredients.items():
@@ -140,14 +192,14 @@ def get_status(email):
             total_fat += info.get("fat", 0)
             total_carb += info.get("carb", 0)
 
-    #Get recommended targets
+    # Get recommended targets
     targets = calculate_nutrition_targets(weight, height, age, goal)
     rec_cal = targets["calorie"]
     rec_protein = targets["protein"]
     rec_fat = targets["fat"]
     rec_carb = targets["carb"]
 
-    #Set thresholds
+    # Set thresholds
     cal_lower = rec_cal * 0.9
     cal_upper = rec_cal * 1.1
     protein_lower = rec_protein * 0.9
@@ -157,17 +209,21 @@ def get_status(email):
     carb_lower = rec_carb * 0.9
     carb_upper = rec_carb * 1.1
 
-    #Determine status based on goal
+    # Determine status based on goal
     if goal == "weight loss":
-        #Eating less than target is ahead, more is behind
+        # Eating less than target is ahead, more is behind
         if total_calorie < cal_lower and total_fat < fat_lower:
             return 1
-        elif total_calorie > cal_upper or total_fat > fat_upper or total_carb > carb_upper:
+        elif (
+            total_calorie > cal_upper
+            or total_fat > fat_upper
+            or total_carb > carb_upper
+        ):
             return -1
         else:
             return 0
     elif goal == "muscle gain":
-        #Eating more calories & protein is ahead, less is behind
+        # Eating more calories & protein is ahead, less is behind
         if total_calorie > cal_upper and total_protein > protein_upper:
             return 1
         elif total_calorie < cal_lower or total_protein < protein_lower:
@@ -175,7 +231,8 @@ def get_status(email):
         else:
             return 0
     else:
-        return 0  #fallback if other goal or no goal was given
+        return 0  # fallback if other goal or no goal was given
+
 
 def get_recommendations(email):
     """
@@ -191,7 +248,7 @@ def get_recommendations(email):
             "carb": 22,
             "type": "Salad",
             "image_url": f"{SERVER_URL}/get-image/berry_chicken_salad.jpg",
-            "recipe_url": "https://ourbestbites.com/grilled-chicken-berry-salad/"
+            "recipe_url": "https://ourbestbites.com/grilled-chicken-berry-salad/",
         },
         {
             "name": "Chicken and Vegetables",
@@ -202,6 +259,6 @@ def get_recommendations(email):
             "carb": 21,
             "type": "Protein",
             "image_url": f"{SERVER_URL}/get-image/chicken_vegetables.jpg",
-            "recipe_url": "https://simply-delicious-food.com/30-minute-easy-grilled-chicken-and-vegetables/"
-        }
+            "recipe_url": "https://simply-delicious-food.com/30-minute-easy-grilled-chicken-and-vegetables/",
+        },
     ]
