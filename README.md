@@ -1,43 +1,117 @@
 # Personal Food Logging App
 
-## Backend Setup
+This repository contains a Flask backend and an Expo/React Native frontend for a personal food logging app.
 
-1. Add .env variables:
-    - USDA_API_KEY: API key to access the USDA database
-    - EMAIL: Email address to send 2FA emails
-    - EMAIL_PASSWORD: The app-specific password for the above email (generated from [Google Account’s App Passwords](https://myaccount.google.com/apppasswords))
-    - GOOGLE_CLIENT_ID: Client ID from Google OAuth credentials (used for Google login)
-        
-        To obtain it:
-        1. Go to https://console.cloud.google.com/apis/credentials
-        2. Create a project
-        3. Navigate to the Clients tab
-        4. Create a Web Application Client
-        5. Add http://localhost:8080/auth/google/callback to Authorized Redirect URIs
-        6. Copy the Client ID and use it for GOOGLE_CLIENT_ID
+This README explains how to run the app locally, how the backend is hosted in production, and options for running the ML model (locally or via SageMaker).
 
-    - GOOGLE_CLIENT_SECRET: Client secret from Google OAuth credentials
-       
-        To obtain it:
-        1. Open the Client created above. There should be a Client Secrets section
-        2. Copy the Client secret and use it for GOOGLE_CLIENT_SECRET
-        
-    - SECRET_KEY: (optional) Flask secret key for sessions and cookies
+## Overview
 
-2. Install all dependencies: `pip install -r requirements.txt`
+- Backend: Flask app in `backend/` that provides API endpoints for authentication, meal processing, image uploads (S3), and user data.
+- Frontend: Expo-managed React Native app in `frontend/`.
+- Production hosting: Backend is deployed to AWS Elastic Beanstalk; ML models can be hosted on SageMaker endpoints (configured via `.env`).
 
-3. Navigate to the backend folder: `cd backend`
+## Backend — Local development
 
-4. Run the server: `python -m app.server`
+1. Open a terminal and go to the backend folder:
 
-## Frontend Setup
+```bash
+cd backend
+```
 
-1. Navigate to the frontend folder: `cd frontend`
+2. Create and activate a virtual environment (recommended):
 
-2. Install all packages: `npm install`
+```bash
+python3 -m venv .venv
+source .venv/bin/activate    # zsh / bash on macOS
+```
 
-3. Run the application: `npx expo start`
+3. Install Python dependencies:
+ted
+```bash
+pip install -r requirements.txt
+```
 
-    i. To open on web, press w
 
-    ii. To open on a phone, scan the QR code with Expo Go (Android) or the Camera app (iOS)
+4. Start the backend server (development):
+
+```bash
+# from backend/
+python -m application.py
+```
+
+The Flask app will listen on port 8080 by default (see `backend/app/server.py`).
+
+### Running the ML model locally vs. using a stub
+
+- The backend will try to import `app.utils.process_meal` (the real ML processor). If that import fails (missing heavy ML dependencies, model files, etc.), the server will automatically fall back to a lightweight stub implementation `app.utils.process_meal_stub` which returns mock ingredient data. This makes local development easy without needing to install large ML packages.
+
+- To run the real ML model locally:
+    1. Ensure the ML model code and dependencies are available (the repo includes `backend/app/utils/process_meal.py` if present). Install any extra ML dependencies (torch, transformers, etc.) on top of `requirements.txt` if necessary.
+    2. Make sure models are downloaded or accessible by `process_meal.py` (follow any instructions inside that file for model download).
+    3. Start the backend (same command as above). When `process_meal` is importable the server will print "Using local ML (CLIP + DINO models)" and will use the local model for `/process-meal-image`.
+
+- If you don't want to run heavy models locally, you can rely on the stub (no extra work). In production, you may host ML on SageMaker and configure `SAGEMAKER_ENDPOINT_NAME` in `.env`.
+
+
+## Frontend — Local development (Expo)
+
+1. Open a terminal and go to the frontend folder:
+
+```bash
+cd frontend
+```
+
+2. Install dependencies:
+
+```bash
+# From frontend/
+npm install
+# or
+npm ci
+```
+
+3. Start the Expo dev server:
+
+```bash
+npx expo start
+```
+
+4. Running the app and connecting to local backend/ML server:
+
+- The frontend expects the ML server to be available at port 8080 (local backend). The helper `getMLServerUrl()` in `frontend/src/utils/api.ts` uses the Expo host information to make `http://<host>:8080` the ML server URL. So if you run the backend locally (on port 8080) the frontend will automatically route ML requests there.
+
+- If the backend returns an S3 filename instead of a URL, the frontend will request images via the backend's `/get-meal-image/<filename>` endpoint (the backend proxies S3).
+
+## Quick dev workflow (summary)
+
+1. Start backend (with local ML or stub):
+
+```bash
+cd backend
+source .venv/bin/activate
+python application.py
+```
+
+2. Start frontend:
+
+```bash
+cd frontend
+npm install
+npx expo start
+```
+
+3. Use the app in Expo, add a meal — the frontend will POST images to the backend `/process-meal-image` route, backend returns ingredients and stores the image to S3.
+
+## Troubleshooting
+
+- "ML models not available" printed on server start: the backend did not find the local ML implementation. That's okay — it will use the stub. To run the real model, ensure `app/utils/process_meal.py` is present and its dependencies are installed.
+- CORS issues: the backend enables CORS for all origins for development. In production lock down `ALLOWED_ORIGINS` in environment variables.
+- S3 permissions errors: ensure the AWS credentials used locally have PutObject/GetObject permissions for the configured S3 bucket.
+
+## Tests
+
+- Frontend unit/integration tests are configured with Vitest. From the `frontend/` folder run:
+
+```bash
+npm run test
+```
