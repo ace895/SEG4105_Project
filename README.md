@@ -10,6 +10,11 @@ This README explains how to run the app locally, how the backend is hosted in pr
 - Frontend: Expo-managed React Native app in `frontend/`.
 - Production hosting: Backend is deployed to AWS Elastic Beanstalk; ML models can be hosted on SageMaker endpoints (configured via `.env`).
 
+
+## Requirements
+- Request the team for Access to AWS SES Sandbox so your email can receive the 2FA.
+Otherwise your email will not get the 2FA email. Make sure to check spam folder for 2FA email.
+
 ## Backend — Local development
 
 1. Open a terminal and go to the backend folder:
